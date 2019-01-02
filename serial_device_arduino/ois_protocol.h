@@ -24,12 +24,13 @@ struct OisCommand
 {
   const char* name;
 };
+struct OisState;
 
-void ois_setup(const char* name, uint32_t pid, uint32_t vid, OisCommand* commands, int numCommands, OisNumericInput* inputs, int numInputs, OisNumericOutput* outputs, int numOutputs, int version);
-void ois_loop();
-void ois_set(OisNumericOutput& output, int value);
-void ois_execute(OisCommand& command);
-void ois_print(const char*);
+void ois_setup(OisState&, const char* name, uint32_t pid, uint32_t vid, OisCommand* commands, int numCommands, OisNumericInput* inputs, int numInputs, OisNumericOutput* outputs, int numOutputs, int version);
+void ois_loop(OisState&);
+void ois_set(OisState&, OisNumericOutput& output, int value);
+void ois_execute(OisState&, OisCommand& command);
+void ois_print(OisState&, const char*);
 
 
 
@@ -86,55 +87,55 @@ struct OisState
   int touchedOutputsIterator;
   
   int synCount;
-} ois;
+};
 
 
 template<class CMD, class NI, class NO>
-void ois_setup_structs(const char* name, uint32_t pid, uint32_t vid, CMD& commands, NI& inputs, NO& outputs, int version = 2)
+void ois_setup_structs(OisState& ois, const char* name, uint32_t pid, uint32_t vid, CMD& commands, NI& inputs, NO& outputs, int version = 2)
 {
-  ois_setup(name, pid, vid, 
+  ois_setup(ois, name, pid, vid, 
             (OisCommand*)&commands, sizeof(commands)/sizeof(OisCommand),
             (OisNumericInput*)&inputs, sizeof(inputs)/sizeof(OisNumericInput),
             (OisNumericOutput*)&outputs, sizeof(outputs)/sizeof(OisNumericOutput), version);
 }
 
 template<int CMD, int NI, int NO>
-void ois_setup(const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD], OisNumericInput(&inputs)[NI], OisNumericOutput(&outputs)[NO], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD], OisNumericInput(&inputs)[NI], OisNumericOutput(&outputs)[NO], int version = 2)
 {
-  ois_setup(name, pid, vid, commands, CMD, inputs, NI, outputs, NO, version);
+  ois_setup(ois, name, pid, vid, commands, CMD, inputs, NI, outputs, NO, version);
 }
 template<int CMD, int NI>
-void ois_setup(const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD], OisNumericInput(&inputs)[NI], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD], OisNumericInput(&inputs)[NI], int version = 2)
 {
-  ois_setup(name, pid, vid, commands, CMD, inputs, NI, 0, 0, version);
+  ois_setup(ois, name, pid, vid, commands, CMD, inputs, NI, 0, 0, version);
 }
 template<int CMD, int NO>
-void ois_setup(const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD],  OisNumericOutput(&outputs)[NO], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD],  OisNumericOutput(&outputs)[NO], int version = 2)
 {
-  ois_setup(name, pid, vid, commands, CMD, 0, 0, outputs, NO, version);
+  ois_setup(ois, name, pid, vid, commands, CMD, 0, 0, outputs, NO, version);
 }
 template<int NI, int NO>
-void ois_setup(const char* name, uint32_t pid, uint32_t vid, OisNumericInput(&inputs)[NI], OisNumericOutput(&outputs)[NO], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisNumericInput(&inputs)[NI], OisNumericOutput(&outputs)[NO], int version = 2)
 {
-  ois_setup(name, pid, vid, 0, 0, inputs, NI, outputs, NO, version);
+  ois_setup(ois, name, pid, vid, 0, 0, inputs, NI, outputs, NO, version);
 }
 template<int CMD>
-void ois_setup(const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD], int version = 2)
 {
-  ois_setup(name, pid, vid, commands, CMD, 0, 0, 0, 0, version);
+  ois_setup(ois, name, pid, vid, commands, CMD, 0, 0, 0, 0, version);
 }
 template<int NI>
-void ois_setup(const char* name, uint32_t pid, uint32_t vid, OisNumericInput(&inputs)[NI], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisNumericInput(&inputs)[NI], int version = 2)
 {
-  ois_setup(name, pid, vid, 0, 0, inputs, NI, 0, 0, version);
+  ois_setup(ois, name, pid, vid, 0, 0, inputs, NI, 0, 0, version);
 }
 template<int NO>
-void ois_setup(const char* name, uint32_t pid, uint32_t vid, OisNumericOutput(&outputs)[NO], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisNumericOutput(&outputs)[NO], int version = 2)
 {
-  ois_setup(name, pid, vid, 0, 0, 0, 0, outputs, NO, version);
+  ois_setup(ois, name, pid, vid, 0, 0, 0, 0, outputs, NO, version);
 }
 
-void ois_setup(const char* deviceName, uint32_t pid, uint32_t vid, OisCommand* commands, int numCommands, OisNumericInput* inputs, int numInputs, OisNumericOutput* outputs, int numOutputs, int version)
+void ois_setup(OisState& ois, const char* deviceName, uint32_t pid, uint32_t vid, OisCommand* commands, int numCommands, OisNumericInput* inputs, int numInputs, OisNumericOutput* outputs, int numOutputs, int version)
 {
 #ifdef USB_JOYSTICK
   joystick_setup();
@@ -183,7 +184,7 @@ void ois_setup(const char* deviceName, uint32_t pid, uint32_t vid, OisCommand* c
 
 
 #ifndef USB_JOYSTICK
-void ois_set(OisNumericOutput& output, int data)
+void ois_set(OisState& ois, OisNumericOutput& output, int data)
 {
   if( output.value == data )
     return;
@@ -198,7 +199,7 @@ void ois_set(OisNumericOutput& output, int data)
   ois.numTouchedOutputs += isNew;
 }
 
-void ois_execute(OisCommand& command)
+void ois_execute(OisState& ois, OisCommand& command)
 {
   int index = &command - ois.commands;
   int slot = index / (sizeof(int)*8);
@@ -224,7 +225,7 @@ char* ZeroDelimiter(char* str, char delimiter)
   return c;
 }
   
-void ois_reset()
+void ois_reset(OisState& ois)
 {
   ois.synCount = 0;
   ois.gameTitle[0] = '\0';
@@ -232,7 +233,7 @@ void ois_reset()
   ois.deviceState = OisState::Handshaking;
 }
 
-void ois_parse(char* cmd)
+void ois_parse(OisState& ois, char* cmd)
 {
   if( !cmd[0] )
     return;
@@ -260,7 +261,7 @@ void ois_parse(char* cmd)
       case FOURCC("END\0")://v2
       {
         ois.version = ois.maxVersion;
-        ois_reset();
+        ois_reset(ois);
         break;
       }
       case FOURCC("DEN\0")://v1
@@ -271,7 +272,7 @@ void ois_parse(char* cmd)
           ois.version--;
         else
           ois.version = ois.maxVersion;
-        ois_reset();
+        ois_reset(ois);
         break;
       }
       case FOURCC("ACK=")://v2
@@ -295,7 +296,7 @@ void ois_parse(char* cmd)
   }
 }
 
-void ois_recv()
+void ois_recv(OisState& ois)
 {
   int canRead = Serial.available();
   if( canRead == 0 )
@@ -319,14 +320,14 @@ void ois_recv()
     if( *c != '\n' )
       continue;
     *c = '\0';
-    ois_parse(start);
+    ois_parse(ois, start);
     start = c+1;
   }
   
   if( start == ois.messageBuffer && end == ois.messageBuffer+OIS_BUFFER_LENGTH )
   {//filled up the buffer without getting a newline!? probably garbage???
     ois.messageBuffer[OIS_BUFFER_LENGTH-1] = '\0';
-    ois_parse(ois.messageBuffer);
+    ois_parse(ois, ois.messageBuffer);
     ois.messageLength = 0;
   }
   else
@@ -337,7 +338,7 @@ void ois_recv()
   }
 }
 
-void ois_send_handshake()
+void ois_send_handshake(OisState& ois)
 {/*
   ++ois.synCount;
   if( ois.synCount > 300 && ois.baud != 9600 )
@@ -358,7 +359,7 @@ void ois_send_handshake()
 }
 
 
-void ois_send_pid()
+void ois_send_pid(OisState& ois)
 {
   Serial.print("PID=");
   Serial.print(ois.pid);
@@ -368,9 +369,9 @@ void ois_send_pid()
   Serial.println(ois.deviceName);
 }
 
-void ois_send_sync()
+void ois_send_sync(OisState& ois)
 {
-  ois_send_pid();
+  ois_send_pid(ois);
     
   int channel = 0;
   for( int i=0, end=ois.numCommands; i!=end; ++i, ++channel )
@@ -408,14 +409,14 @@ void ois_send_sync()
   ois.deviceState = OisState::Active;
 }
 
-void ois_send_command(int index)
+void ois_send_command(OisState& ois, int index)
 {
   Serial.print("EXC=");
   Serial.print(index);
   Serial.print("\n");
 }
 
-void ois_send_output(int index)
+void ois_send_output(OisState& ois, int index)
 {
   int base = ois.numCommands + ois.numInputs;
   Serial.print(index + base);
@@ -424,7 +425,7 @@ void ois_send_output(int index)
   Serial.print("\n");
 }
 
-void ois_send_active()
+void ois_send_active(OisState& ois)
 {
   int sent = 0;
   int sendLimit = 2;//todo
@@ -440,7 +441,7 @@ void ois_send_active()
       {
         if( value & mask )
         {
-          ois_send_command(i * (sizeof(int)*8) + j);
+          ois_send_command(ois, i * (sizeof(int)*8) + j);
           value &= ~mask;
           --ois.numTouchedCommands;
           ++sent;
@@ -464,7 +465,7 @@ void ois_send_active()
       {
         if( value & mask )
         {
-          ois_send_output(i * (sizeof(int)*8) + j);
+          ois_send_output(ois, i * (sizeof(int)*8) + j);
           value &= ~mask;
           --ois.numTouchedOutputs;
           ++sent;
@@ -477,7 +478,7 @@ void ois_send_active()
   }
 }
 #else
-void ois_set(OisNumericOutput& output, int data)
+void ois_set(OisState& ois, OisNumericOutput& output, int data)
 {
   if( output.value == data )
     return;
@@ -493,7 +494,7 @@ void ois_set(OisNumericOutput& output, int data)
     joyReport.button[index] &= ~mask;
 }
 
-void ois_execute(OisCommand& command)
+void ois_execute(OisState& ois, OisCommand& command)
 {
   int index = &command - ois.commands;
   int slot = index / 8;
@@ -504,25 +505,25 @@ void ois_execute(OisCommand& command)
 #endif
 
 
-void ois_loop()
+void ois_loop(OisState& ois)
 {
 #ifdef USB_JOYSTICK
   sendJoyReport(&joyReport);
   //todo - for each command, clear button bit
   delay(1);
 #else
-  ois_recv();
+  ois_recv(ois);
   switch( ois.deviceState )
   {
     default:
-    case OisState::Handshaking:     return ois_send_handshake();
-    case OisState::Synchronisation: return ois_send_sync();
-    case OisState::Active:          return ois_send_active();
+    case OisState::Handshaking:     return ois_send_handshake(ois);
+    case OisState::Synchronisation: return ois_send_sync(ois);
+    case OisState::Active:          return ois_send_active(ois);
   }
 #endif
 }
 
-void ois_print(const char* text)
+void ois_print(OisState& ois, const char* text)
 {
 #if !defined USB_JOYSTICK
   Serial.print("DBG=");
