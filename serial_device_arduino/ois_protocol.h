@@ -2,6 +2,58 @@
 # include "joystick.h"
 #endif
 
+#ifndef OIS_BINARY
+#define OIS_BINARY 0
+#endif
+
+#ifndef OIS_ASCII
+#define OIS_ASCII 1
+#endif
+
+#ifndef OIS_MIN_VERSION
+#define OIS_MIN_VERSION 0
+#endif
+
+#ifndef OIS_MAX_VERSION
+#define OIS_MAX_VERSION 2
+#endif
+
+#if OIS_MAX_VERSION < 2
+#undef OIS_BINARY
+#define OIS_BINARY 0
+#endif
+
+#if !OIS_ASCII && !OIS_BINARY 
+#error "You need at least either ASCII or binary!"
+#endif
+
+#if !OIS_ASCII && OIS_MIN_VERSION < 2 
+#error "Version 1 requires ASCII support!"
+#endif
+
+#if OIS_MIN_VERSION > OIS_MAX_VERSION
+#error "Min can't be above max..."
+#endif
+
+//todo - toggle numeric input support
+/*
+  enum ClientCommandsBin
+  {
+    CL_TNI   = 0x05,
+    CL_TNI_PAYLOAD_T = 0x10,
+  };*/
+
+#if OIS_BINARY && OIS_ASCII
+# define IF_BINARY if( ois.binary )
+# define IF_ASCII  if( !ois.binary )
+#elif OIS_BINARY
+# define IF_BINARY if(1)
+# define IF_ASCII  if(0)
+#else
+# define IF_BINARY if(0)
+# define IF_ASCII  if(1)
+#endif
+
 enum NumericType
 {
   Boolean,
@@ -64,8 +116,9 @@ struct OisState
   int gameVersion;
 
   const char* deviceName = "";
-  unsigned long pid=0, vid=0;
-  
+  uint32_t pid=0, vid=0;
+
+  bool binary;
   char messageBuffer[OIS_BUFFER_LENGTH];
   int messageLength;
 
@@ -87,11 +140,50 @@ struct OisState
   int touchedOutputsIterator;
   
   int synCount;
+
+  
+  enum ClientCommandsBin
+  {
+    CL_CMD   = 0x01,
+    CL_NIO   = 0x02,
+    CL_ACT   = 0x03,
+    CL_DBG   = 0x04,
+    CL_TNI   = 0x05,
+    CL_PID   = 0x06,
+    CL_END   = 0x07,
+    CL_VAL_1 = 0x08,
+    CL_VAL_2 = 0x09,
+    CL_VAL_3 = 0x0A,
+    CL_VAL_4 = 0x0B,
+    CL_EXC_0 = 0x0C,
+    CL_EXC_1 = 0x0D,
+    CL_EXC_2 = 0x0E,
+
+    CL_COMMAND_MASK  = 0x0F,
+    CL_PAYLOAD_SHIFT = 4,
+
+    CL_N_PAYLOAD_N = 0x10,
+    CL_N_PAYLOAD_F = 0x20,
+    CL_N_PAYLOAD_O = 0x40,
+    
+    CL_TNI_PAYLOAD_T = 0x10,
+  };
+  enum ServerCommandsBin
+  {
+    SV_NUL   = 0x00,
+    SV_VAL_1 = 0x01,
+    SV_VAL_2 = 0x02,
+    SV_VAL_3 = 0x03,
+    SV_VAL_4 = 0x04,
+
+    SV_COMMAND_MASK  = 0x07,
+    SV_PAYLOAD_SHIFT = 3,
+  };
 };
 
 
 template<class CMD, class NI, class NO>
-void ois_setup_structs(OisState& ois, const char* name, uint32_t pid, uint32_t vid, CMD& commands, NI& inputs, NO& outputs, int version = 2)
+void ois_setup_structs(OisState& ois, const char* name, uint32_t pid, uint32_t vid, CMD& commands, NI& inputs, NO& outputs, int version = OIS_MAX_VERSION)
 {
   ois_setup(ois, name, pid, vid, 
             (OisCommand*)&commands, sizeof(commands)/sizeof(OisCommand),
@@ -100,37 +192,37 @@ void ois_setup_structs(OisState& ois, const char* name, uint32_t pid, uint32_t v
 }
 
 template<int CMD, int NI, int NO>
-void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD], OisNumericInput(&inputs)[NI], OisNumericOutput(&outputs)[NO], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD], OisNumericInput(&inputs)[NI], OisNumericOutput(&outputs)[NO], int version = OIS_MAX_VERSION)
 {
   ois_setup(ois, name, pid, vid, commands, CMD, inputs, NI, outputs, NO, version);
 }
 template<int CMD, int NI>
-void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD], OisNumericInput(&inputs)[NI], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD], OisNumericInput(&inputs)[NI], int version = OIS_MAX_VERSION)
 {
   ois_setup(ois, name, pid, vid, commands, CMD, inputs, NI, 0, 0, version);
 }
 template<int CMD, int NO>
-void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD],  OisNumericOutput(&outputs)[NO], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD],  OisNumericOutput(&outputs)[NO], int version = OIS_MAX_VERSION)
 {
   ois_setup(ois, name, pid, vid, commands, CMD, 0, 0, outputs, NO, version);
 }
 template<int NI, int NO>
-void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisNumericInput(&inputs)[NI], OisNumericOutput(&outputs)[NO], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisNumericInput(&inputs)[NI], OisNumericOutput(&outputs)[NO], int version = OIS_MAX_VERSION)
 {
   ois_setup(ois, name, pid, vid, 0, 0, inputs, NI, outputs, NO, version);
 }
 template<int CMD>
-void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisCommand(&commands)[CMD], int version = OIS_MAX_VERSION)
 {
   ois_setup(ois, name, pid, vid, commands, CMD, 0, 0, 0, 0, version);
 }
 template<int NI>
-void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisNumericInput(&inputs)[NI], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisNumericInput(&inputs)[NI], int version = OIS_MAX_VERSION)
 {
   ois_setup(ois, name, pid, vid, 0, 0, inputs, NI, 0, 0, version);
 }
 template<int NO>
-void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisNumericOutput(&outputs)[NO], int version = 2)
+void ois_setup(OisState& ois, const char* name, uint32_t pid, uint32_t vid, OisNumericOutput(&outputs)[NO], int version = OIS_MAX_VERSION)
 {
   ois_setup(ois, name, pid, vid, 0, 0, 0, 0, outputs, NO, version);
 }
@@ -159,7 +251,7 @@ void ois_setup(OisState& ois, const char* deviceName, uint32_t pid, uint32_t vid
   ois.deviceName = deviceName;
   ois.pid = pid;
   ois.vid = vid;
-
+  ois.binary = false;
   ois.inputs = inputs;
   ois.outputs = outputs;
   ois.commands = commands;
@@ -227,19 +319,21 @@ char* ZeroDelimiter(char* str, char delimiter)
   
 void ois_reset(OisState& ois)
 {
+  ois.binary = false;
   ois.synCount = 0;
   ois.gameTitle[0] = '\0';
   ois.gameVersion = 0;
   ois.deviceState = OisState::Handshaking;
 }
 
-void ois_parse(OisState& ois, char* cmd)
+void ois_parse_ascii(OisState& ois, char* cmd)
 {
   if( !cmd[0] )
     return;
   u32 type = 0;
   if( cmd[1] && cmd[2] )
     type = FOURCC(cmd);
+#if OIS_ASCII
   bool isKeyVal = 0!=isDigit(cmd[0]);
   if( isKeyVal )
   {
@@ -252,26 +346,28 @@ void ois_parse(OisState& ois, char* cmd)
     }
   }
   else
+#endif
   {
     char* payload = cmd + 4;
     switch( type )
     {
       default:
         break;
-      case FOURCC("END\0")://v2
-      {
-        ois.version = ois.maxVersion;
-        ois_reset(ois);
-        break;
-      }
       case FOURCC("DEN\0")://v1
       {
         if( ois.version == 451 )
-          ois.version = 2;
+          ois.version = OIS_MAX_VERSION;
         else if( ois.version > 0 )
           ois.version--;
         else
           ois.version = ois.maxVersion;
+        ois_reset(ois);
+        break;
+      }
+#if OIS_MAX_VERSION >= 2
+      case FOURCC("END\0")://v2
+      {
+        ois.version = ois.maxVersion;
         ois_reset(ois);
         break;
       }
@@ -282,18 +378,34 @@ void ois_parse(OisState& ois, char* cmd)
         ois.gameTitle = (char*)realloc(ois.gameTitle, len);
         memcpy(ois.gameTitle, gameTitle, len);
         ois.gameVersion = atoi(payload);
+#if OIS_BINARY
+        ois.binary = true;
+#endif
       }//fall-through:
+#endif
       case FOURCC("ACK\0")://v1
         ois.deviceState = OisState::Synchronisation;
         break;
+#if OIS_MIN_VERSION == 0
       case FOURCC("452\r")://hack for objects in space beta
       {
         ois.version = 1;
         ois.deviceState = OisState::Synchronisation;
         break;
       }
+#endif
     }
   }
+}
+
+int ois_parse_binary(OisState& ois, char* start, char* end)
+{
+  //todo
+  /*
+    SV_VAL_1 = 0x01,
+    SV_VAL_2 = 0x02,
+    SV_VAL_3 = 0x03,
+    SV_VAL_4 = 0x04,*/
 }
 
 void ois_recv(OisState& ois)
@@ -309,26 +421,47 @@ void ois_recv(OisState& ois)
   }
   else//shouldn't happen!!!
   {
-    ois.messageBuffer[OIS_BUFFER_LENGTH-1] = '\n';
-    ois.messageLength = OIS_BUFFER_LENGTH;
+    ois_print(ois, "ERROR: Command buffer full!");
+    ois.messageLength = 0;
   }
 
   char* start = ois.messageBuffer;
   char* end = start + ois.messageLength;
-  for( char* c = start; c != end; ++c )
+  
+#if OIS_MAX_VERSION >= 2
+  if( ois.binary )
   {
-    if( *c != '\n' )
-      continue;
-    *c = '\0';
-    ois_parse(ois, start);
-    start = c+1;
+    while( start < end )
+    {
+      int commandLength = ois_parse_binary(ois, start, end);
+      if( commandLength == 0 )//need to read more data
+        break;
+      if( commandLength < 0 )//not a binary command!
+      {
+        ois.version = ois.maxVersion;
+        ois_reset(ois);
+        return;
+      }
+      start += commandLength;//processed
+    }
+  }
+  else
+#endif
+  {
+    for( char* c = start; c != end; ++c )
+    {
+      if( *c != '\n' )
+        continue;
+      *c = '\0';
+      ois_parse_ascii(ois, start);
+      start = c+1;
+    }
   }
   
   if( start == ois.messageBuffer && end == ois.messageBuffer+OIS_BUFFER_LENGTH )
   {//filled up the buffer without getting a newline!? probably garbage???
-    ois.messageBuffer[OIS_BUFFER_LENGTH-1] = '\0';
-    ois_parse(ois, ois.messageBuffer);
     ois.messageLength = 0;
+    ois_print(ois, "ERROR: Command buffer full!");
   }
   else
   {
@@ -348,82 +481,239 @@ void ois_send_handshake(OisState& ois)
     Serial.begin( ois.baud = 9600 );
     ois.synCount = 0;
   }*/
-  if( ois.maxVersion == 451 )//hack for objects in space beta
-    Serial.print("541\n");
+#if OIS_MIN_VERSION == 0
+  Serial.print("541\n");//hack for objects in space beta
+#endif
 
   Serial.print("SYN=");
   Serial.print(ois.version);
+#if OIS_MAX_VERSION > 1
+  if( ois.version > 1 )
+  {
+#if OIS_BINARY
+    Serial.print(",B");
+#else
+    Serial.print(",A");
+#endif
+  }
+#endif
   Serial.print("\n");
 
   delay(500);
 }
 
 
+#if OIS_MAX_VERSION >= 2
 void ois_send_pid(OisState& ois)
 {
-  Serial.print("PID=");
-  Serial.print(ois.pid);
-  Serial.print(",");
-  Serial.print(ois.vid);
-  Serial.print(",");
-  Serial.println(ois.deviceName);
+  IF_BINARY
+  {
+    uint8_t data[9];
+    data[0] = OisState::CL_PID;
+    data[1] = (uint8_t)(ois.pid);
+    data[2] = (uint8_t)(ois.pid>>8);
+    data[3] = (uint8_t)(ois.pid>>16);
+    data[4] = (uint8_t)(ois.pid>>24);
+    data[5] = (uint8_t)(ois.vid);
+    data[6] = (uint8_t)(ois.vid>>8);
+    data[7] = (uint8_t)(ois.vid>>16);
+    data[8] = (uint8_t)(ois.vid>>24);
+    Serial.write(data, 9);
+    Serial.write(ois.deviceName, strlen(ois.deviceName)+1);
+  }
+  IF_ASCII
+  {
+    Serial.print("PID=");
+    Serial.print(ois.pid);
+    Serial.print(",");
+    Serial.print(ois.vid);
+    Serial.print(",");
+    Serial.println(ois.deviceName);
+  }
 }
+#endif
 
 void ois_send_sync(OisState& ois)
 {
-  ois_send_pid(ois);
+#if OIS_MAX_VERSION >= 2
+  if( ois.version >= 2 )
+    ois_send_pid(ois);
+#endif
     
   int channel = 0;
   for( int i=0, end=ois.numCommands; i!=end; ++i, ++channel )
   {
     OisCommand& c = ois.commands[i];
-    Serial.print("CMD=");
-    Serial.print(c.name); Serial.print(","); Serial.print(channel); Serial.print("\n");
+    IF_BINARY
+    {
+      uint8_t data[3];
+      data[0] = OisState::CL_CMD;
+      data[1] = (uint8_t)(channel);
+      data[2] = (uint8_t)(channel>>8);
+      Serial.write(data, 3);
+      Serial.write(c.name, strlen(c.name)+1);
+    }
+    IF_ASCII
+    {
+      Serial.print("CMD=");
+      Serial.print(c.name); Serial.print(","); Serial.print(channel); Serial.print("\n");
+    }
   }
   for( int i=0, end=ois.numInputs; i!=end; ++i, ++channel )
   {
     OisNumericInput& c = ois.inputs[i];
-    switch( c.type )
+    IF_BINARY
     {
-      case Boolean:  Serial.print("NIB="); break;
-      case Number:   Serial.print("NIN="); break;
-      case Fraction: Serial.print("NIF="); break;
+      uint8_t data[3];
+      data[0] = OisState::CL_NIO | (c.type==Number ? OisState::CL_N_PAYLOAD_N : (c.type==Fraction ? OisState::CL_N_PAYLOAD_F : 0));
+      data[1] = (uint8_t)(channel);
+      data[2] = (uint8_t)(channel>>8);
+      Serial.write(data, 3);
+      Serial.write(c.name, strlen(c.name)+1);
     }
-    Serial.print(c.name); Serial.print(","); Serial.print(channel); Serial.print("\n");
+    IF_ASCII
+    {
+      switch( c.type )
+      {
+        case Boolean:  Serial.print("NIB="); break;
+        case Number:   Serial.print("NIN="); break;
+        case Fraction: Serial.print("NIF="); break;
+      }
+      Serial.print(c.name); Serial.print(","); Serial.print(channel); Serial.print("\n");
+    }
   }
   if( ois.version >= 2 )
   {
     for( int i=0, end=ois.numOutputs; i!=end; ++i, ++channel )
     {
       OisNumericOutput& c = ois.outputs[i];
-      switch( c.type )
+      IF_BINARY
       {
-        case Boolean:  Serial.print("NOB="); break;
-        case Number:   Serial.print("NON="); break;
-        case Fraction: Serial.print("NOF="); break;
+        uint8_t data[3];
+        data[0] = OisState::CL_NIO | OisState::CL_N_PAYLOAD_O | (c.type==Number ? OisState::CL_N_PAYLOAD_N : (c.type==Fraction ? OisState::CL_N_PAYLOAD_F : 0));
+        data[1] = (uint8_t)(channel);
+        data[2] = (uint8_t)(channel>>8);
+        Serial.write(data, 3);
+        Serial.write(c.name, strlen(c.name)+1);
       }
-      Serial.print(c.name); Serial.print(","); Serial.print(channel); Serial.print("\n");
+      IF_ASCII
+      {
+        switch( c.type )
+        {
+          case Boolean:  Serial.print("NOB="); break;
+          case Number:   Serial.print("NON="); break;
+          case Fraction: Serial.print("NOF="); break;
+        }
+        Serial.print(c.name); Serial.print(","); Serial.print(channel); Serial.print("\n");
+      }
     }
   }
-  Serial.print("ACT\n");
+  IF_BINARY
+  {
+    uint8_t data[1];
+    data[0] = OisState::CL_ACT;
+    Serial.write(data, 1);
+  }
+  IF_ASCII
+  {
+    Serial.print("ACT\n");
+  }
   ois.deviceState = OisState::Active;
 }
 
 void ois_send_command(OisState& ois, int index)
 {
-  Serial.print("EXC=");
-  Serial.print(index);
-  Serial.print("\n");
+  IF_BINARY
+  {
+    const unsigned extraBits = 8 - OisState::CL_PAYLOAD_SHIFT;
+    const unsigned channelLimit1 = 1U<<extraBits;
+    const unsigned channelLimit2 = 1U<<(8+extraBits);
+      
+    uint8_t data[3];
+    int length;
+    if( index < channelLimit1 )
+    {
+      length = 1;
+      data[0] = OisState::CL_EXC_0 | (uint8_t)(index << OisState::CL_PAYLOAD_SHIFT);
+    }
+    else if( index < channelLimit2 )
+    {
+      length = 2;
+      data[0] = OisState::CL_EXC_1 | (uint8_t)((index>>8) << OisState::CL_PAYLOAD_SHIFT);
+      data[1] = (uint8_t)(index);
+    }
+    else
+    {
+      length = 3;
+      data[0] = OisState::CL_EXC_2;
+      data[1] = (uint8_t)(index);
+      data[2] = (uint8_t)(index>>8);
+    }
+    Serial.write(data, length);
+  }
+  IF_ASCII
+  {
+    Serial.print("EXC=");
+    Serial.print(index);
+    Serial.print("\n");
+  }
 }
 
+#if OIS_MAX_VERSION >= 2
 void ois_send_output(OisState& ois, int index)
 {
   int base = ois.numCommands + ois.numInputs;
-  Serial.print(index + base);
-  Serial.print("=");
-  Serial.print(ois.outputs[index].value);
-  Serial.print("\n");
+  int value = ois.outputs[index].value;
+  IF_BINARY
+  {
+    uint8_t data[5];
+    int length = 0;
+    uint16_t u = (uint16_t)value;
+    const unsigned extraBits = 8 - OisState::CL_PAYLOAD_SHIFT;
+    const unsigned valueLimit1   = 1U<<extraBits;
+    const unsigned valueLimit2   = 1U<<(8+extraBits);
+    const unsigned channelLimit3 = 1U<<(8+extraBits);
+    if( index < 256 && u < valueLimit1 )
+    {
+      data[0] = (uint8_t)(OisState::CL_VAL_1 | (u << OisState::CL_PAYLOAD_SHIFT));
+      data[1] = (uint8_t)(index);
+      length = 2;
+    }
+    else if( index < 256 && u < valueLimit2 )
+    {
+      data[0] = (uint8_t)(OisState::CL_VAL_2 | ((u>>8) << OisState::CL_PAYLOAD_SHIFT));
+      data[1] = (uint8_t)(u);
+      data[2] = (uint8_t)(index);
+      length = 3;
+    }
+    else if( index < channelLimit3 )
+    {
+      data[0] = (uint8_t)(OisState::CL_VAL_3 | ((index>>8) << OisState::CL_PAYLOAD_SHIFT));
+      data[1] = (uint8_t)(u);
+      data[2] = (uint8_t)(u>>8);
+      data[3] = (uint8_t)(index);
+      length = 4;
+    }
+    else
+    {
+      data[0] = (uint8_t)OisState::CL_VAL_4;
+      data[1] = (uint8_t)(u);
+      data[2] = (uint8_t)(u>>8);
+      data[3] = (uint8_t)(index);
+      data[4] = (uint8_t)(index>>8);
+      length = 5;
+    }
+    Serial.write(data, length);
+  }
+  IF_ASCII
+  {
+    Serial.print(index + base);
+    Serial.print("=");
+    Serial.print(value);
+    Serial.print("\n");
+  }
 }
+#endif
 
 void ois_send_active(OisState& ois)
 {
@@ -453,6 +743,7 @@ void ois_send_active(OisState& ois)
     ois.touchedCommandsIterator = i >= end ? 0 : i;
   }
   
+#if OIS_MAX_VERSION >= 2
   if( ois.numTouchedOutputs && ois.version >= 2 )
   {
     int i, end;
@@ -476,6 +767,7 @@ void ois_send_active(OisState& ois)
     }
     ois.touchedOutputsIterator = i >= end ? 0 : i;
   }
+#endif
 }
 #else
 void ois_set(OisState& ois, OisNumericOutput& output, int data)
@@ -526,9 +818,18 @@ void ois_loop(OisState& ois)
 void ois_print(OisState& ois, const char* text)
 {
 #if !defined USB_JOYSTICK
-  Serial.print("DBG=");
-  Serial.print(text);
-  Serial.print("\n");
+  IF_BINARY
+  {
+    uint8_t data[1] = { OisState::CL_DBG };
+    Serial.write(data, 1);
+    Serial.write(text, strlen(text)+1);
+  }
+  IF_ASCII
+  {
+    Serial.print("DBG=");
+    Serial.print(text);
+    Serial.print("\n");
+  }
 #elif defined _DEBUG
   Serial.print(text);
 #endif
