@@ -12,7 +12,7 @@ public:
 	void Connect(const char* portName);
 	void Disconnect();
 
-	void SetBaud(int, bool flush=true);
+	void SetBaud(int, bool purge=true);
 	int  GetBaud() const { return m_baud; }
 
 	int  Read(char* buffer, int size);
@@ -196,10 +196,9 @@ void SerialPort::Connect(const char* portName)
 	}
 }
 
-void SerialPort::SetBaud(int baud, bool flush)
+void SerialPort::SetBaud(int baud, bool purge)
 {
-	DCB serialParameters = { 0 };
-
+	DCB serialParameters = {};
 	if( !GetCommState(m_handle, &serialParameters) )
 	{
 		OIS_WARN("failed to get current serial parameters");
@@ -227,7 +226,7 @@ void SerialPort::SetBaud(int baud, bool flush)
 	case 256000: baud = CBR_256000; break;        
 	}
 
-	if( serialParameters.BaudRate == baud && !flush )
+	if( serialParameters.BaudRate == baud && !purge )
 		return;
 		
 	serialParameters.BaudRate    = baud;
@@ -241,7 +240,7 @@ void SerialPort::SetBaud(int baud, bool flush)
 		OIS_WARN("could not set Serial port parameters");
 		return Disconnect();
 	}
-	else if( flush )
+	else if( purge )
 		PurgeComm(m_handle, PURGE_RXCLEAR | PURGE_TXCLEAR);
 }
 

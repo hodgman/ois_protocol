@@ -37,12 +37,11 @@
 #include <stdarg.h>
 struct OIS_STRING_BUILDER
 {
-	OIS_STRING temp;
 	const char* FormatTemp(const char* fmt, ...)
 	{
 		va_list	v;
 		va_start(v, fmt);
-		const char* s = Format(temp, fmt, v);
+		const char* s = FormatV(temp, fmt, v);
 		va_end( v );
 		return s;
 	}
@@ -50,17 +49,9 @@ struct OIS_STRING_BUILDER
 	{
 		va_list	v;
 		va_start(v, fmt);
-		const char* s = Format(result, fmt, v);
+		const char* s = FormatV(result, fmt, v);
 		va_end( v );
 		return s;
-	}
-	const char* Format(OIS_STRING& result, const char* fmt, const va_list& v)
-	{
-		int length = _vscprintf( fmt, v ) + 1;
-		result.resize(length);
-		char* buffer = &result[0];
-		vsnprintf(buffer, length, fmt, v);
-		return buffer;
 	}
 	char* AllocTemp(unsigned bytes)
 	{
@@ -70,6 +61,16 @@ struct OIS_STRING_BUILDER
 	void StoreTemp(OIS_STRING& result, const char* buffer)
 	{
 		result = buffer;
+	}
+private:
+	OIS_STRING temp;
+	const char* FormatV(OIS_STRING& result, const char* fmt, const va_list& v)
+	{
+		int length = _vscprintf( fmt, v ) + 1;
+		result.resize(length);
+		char* buffer = &result[0];
+		vsnprintf(buffer, length, fmt, v);
+		return buffer;
 	}
 };
 #endif
@@ -147,8 +148,9 @@ public:
 	} Value;
 	struct NumericValue
 	{
-		int         channel;
 		OIS_STRING  name;
+		uint16_t    channel;
+		bool        active;
 		NumericType type;
 		Value       value;
 	};
@@ -158,7 +160,7 @@ public:
 
 	void SetInput(const NumericValue& input, Value value);
 private:
-	enum ClientCommands
+	enum ClientCommandsAscii
 	{
 		//v1 commands
 		SYN = OIS_FOURCC("SYN="),
@@ -173,11 +175,45 @@ private:
 		NOB = OIS_FOURCC("NOB="),
 		NON = OIS_FOURCC("NON="),
 		NOF = OIS_FOURCC("NOF="),
-		RNI = OIS_FOURCC("RNI="),
-		RNO = OIS_FOURCC("RNO="),
-		RCM = OIS_FOURCC("RCM="),
+		TNI = OIS_FOURCC("TNI="),
 		PID = OIS_FOURCC("PID="),
 		END = OIS_FOURCC("END\0"),
+	};
+	enum ClientCommandsBin
+	{
+		CL_NUL   = 0x00,
+		CL_CMD   = 0x01,
+		CL_NIO   = 0x02,
+		CL_ACT   = 0x03,
+		CL_SYN_  = 'S',//0x53
+		CL_DBG   = 0x04,
+		CL_TNI   = 0x05,
+		CL_PID   = 0x06,
+		CL_END   = 0x07,
+		CL_VAL_1 = 0x08,
+		CL_VAL_2 = 0x09,
+		CL_VAL_3 = 0x0A,
+		CL_VAL_4 = 0x0B,
+		CL_EXC_0 = 0x0C,
+		CL_EXC_1 = 0x0D,
+		CL_EXC_2 = 0x0E,
+
+		CL_COMMAND_MASK  = 0x0F,
+		CL_PAYLOAD_SHIFT = 4,
+
+		CL_N_PAYLOAD_N = 0x10,
+		CL_N_PAYLOAD_F = 0x20,
+		CL_N_PAYLOAD_O = 0x40,
+		
+		CL_TNI_PAYLOAD_T = 0x10,
+	};
+	enum ServerCommandsBin
+	{
+		SV_END   = 0x01,
+		SV_VAL_1 = 0x02,
+		SV_VAL_2 = 0x03,
+		SV_VAL_3 = 0x04,
+		SV_VAL_4 = 0x05,
 	};
 	enum DeviceState
 	{
@@ -192,7 +228,8 @@ private:
 	void SendLn(const char* cmd);
 	bool ExpectState(DeviceStateMask state, const char* cmd, unsigned version);
 	void ClearState();
-	bool Process(char* cmd);
+	bool ProcessAscii(char* cmd);
+	int ProcessBinary(char* start, char* end);
 
 	OIS_PORT m_port;
 	OIS_STRING m_portName;
@@ -201,6 +238,7 @@ private:
 	OIS_STRING m_deviceNameOverride;
 	unsigned m_portId;
 	unsigned m_protocolVersion;
+	bool     m_binary;
 	uint32_t m_pid;
 	uint32_t m_vid;
 	DeviceState m_connectionState;
@@ -209,14 +247,14 @@ private:
 	
 	struct Event
 	{
-		int channel;
+		uint16_t channel;
 		OIS_STRING name;
 	};
 	OIS_VECTOR<NumericValue> m_numericInputs;
 	OIS_VECTOR<NumericValue> m_numericOutputs;
-	OIS_VECTOR<int>          m_queuedInputs;
+	OIS_VECTOR<uint16_t>     m_queuedInputs;
 	OIS_VECTOR<Event>        m_events;
-	OIS_VECTOR<int>          m_eventBuffer;
+	OIS_VECTOR<uint16_t>     m_eventBuffer;
 
 	template<class T>
 	static typename T::value_type* FindChannel(T& values, int channel)
@@ -248,21 +286,26 @@ void OisDevice::Poll()
 
 		char* start = m_commandBuffer;
 		char* end = start + m_commandLength;
-		for( char* c = start; c != end; ++c )
+		if( m_binary )
 		{
-			if( *c != '\n' )
-				continue;
-			*c = '\0';
-			Process(start);
-			start = c+1;
+
+		}
+		else
+		{
+			for( char* c = start; c != end; ++c )
+			{
+				if( *c != '\n' )
+					continue;
+				*c = '\0';
+				ProcessAscii(start);
+				start = c+1;
+			}
 		}
 		OIS_ASSERT( start <= end );
 
 		if( start == m_commandBuffer && end == m_commandBuffer+OIS_ARRAYSIZE(m_commandBuffer) )
 		{
-			OIS_WARN("OisDevice command buffer is full without a \\n present! Discarding...");
-			m_commandBuffer[OIS_ARRAYSIZE(m_commandBuffer)-1] = '\0';
-			Process(m_commandBuffer);
+			OIS_WARN("OisDevice command buffer is full without a valid command present! Discarding...");
 			m_commandLength = 0;
 		}
 		else
@@ -310,7 +353,219 @@ char* OisDevice::ZeroDelimiter(char* str, char delimiter)
 	return c;
 }
 
-bool OisDevice::Process(char* cmd)
+static int CmdStrLength(const char* c, const char* end, char terminator)
+{
+	int length = 0;
+	bool foundNull = false;
+	for( ; c != end && !foundNull; ++c, ++length )
+		foundNull = *c == terminator;
+	return length + (foundNull ? 0 : OIS_MAX_COMMAND_LENGTH*2);
+}
+
+int OisDevice::ProcessBinary(char* start, char* end)
+{
+	if( end <= start+1 )
+		return 0;
+
+	int bufferLength = (int)(end - start);
+	
+	const char* startString = 0;
+	char strTerminator = '\0';
+	uint32_t payload = (*start);
+	int command = payload & CL_COMMAND_MASK;
+	int cmdLength = 1;
+	if( payload == CL_SYN_ )//has the device reset and is sending us ASCII commands?
+	{
+		cmdLength = 0;
+		startString = start;
+		strTerminator = '\n';
+	}
+	else switch( command )
+	{
+		default:
+		case CL_NUL:
+			OIS_WARN( "Unknown command: 0x%x", payload);
+			break;
+		case CL_ACT:
+		case CL_END:
+		case CL_EXC_0:
+			break;
+		case CL_CMD:
+		case CL_NIO:
+			cmdLength += 2;//channel
+			startString = start + cmdLength;
+			break;
+		case CL_DBG:
+			startString = start + cmdLength;
+			break;
+		case CL_PID:
+			cmdLength += 8;//pid/vid
+			startString = start + cmdLength;
+			break;
+		case CL_EXC_1:
+		case CL_VAL_1:
+			cmdLength += 1;
+			break;
+		case CL_TNI:
+		case CL_EXC_2:
+		case CL_VAL_2:
+			cmdLength +=2;
+			break;
+		case CL_VAL_3:
+			cmdLength += 3;
+			break;
+		case CL_VAL_4:
+			cmdLength += 4;
+			break;
+	}
+
+	if( startString )
+	{
+		if( startString >= end )
+			return 0;
+		cmdLength += CmdStrLength(startString, end, strTerminator);
+	}
+
+	if( bufferLength < cmdLength )
+		return 0;
+	
+	switch( command )
+	{
+		case CL_PID:
+		{
+			ExpectState( 1<<Synchronisation, "PID", 2 );
+			m_pid = *(uint32_t*)(start+1);
+			m_vid = *(uint32_t*)(start+5);
+			char* name = start+9;
+			m_deviceNameOverride = OIS_STRING(name);
+			OIS_INFO( "<- PID: %d/%d %s", m_pid, m_vid, name );
+			break;
+		}
+		case CL_CMD:
+		{
+			if( !ExpectState( (1<<Synchronisation)|(1<<Active), "CMD", 2 ) )
+				return false;
+			uint16_t channel = *(uint16_t*)(start+1);
+			char* name = start+3;
+			m_events.push_back({channel, OIS_STRING(name)});
+			OIS_INFO( "<- CMD: %d %s", channel, name );
+			break;
+		}
+		case CL_NIO:
+		{
+			if( !ExpectState( (1<<Synchronisation)|(m_protocolVersion>1?1<<Active:0), "NIO", 2 ) )
+				return false;
+			bool output = payload & CL_N_PAYLOAD_O ? true :false;
+			NumericType nt = payload & CL_N_PAYLOAD_F ? Fraction :
+			                (payload & CL_N_PAYLOAD_N ? Number : Boolean);
+			uint16_t channel = *(uint16_t*)(start+1);
+			char* name = start+3;
+			if( output )
+			{
+				m_numericOutputs.push_back({OIS_STRING(name), channel, true, nt});
+				m_numericOutputs.back().value.number = 0;
+			}
+			else
+			{
+				m_numericInputs.push_back({OIS_STRING(name), channel, true, nt});
+				m_numericInputs.back().value.number = 0xcdcdcdcd;
+			}
+			OIS_INFO( "<- NIO: %d %s (%s %s)", channel, name, output?"Out":"In", nt==Fraction?"Fraction":(nt==Number?"Number":"Boolean") );
+			break;
+		}
+		case CL_ACT:
+		{
+			ExpectState( 1<<Synchronisation, "ACT", 2 );
+			m_connectionState = Active;
+			OIS_INFO( "<- ACT" );
+			break;
+		}
+		case CL_TNI:
+		{
+			ExpectState( (1<<Synchronisation) | (1<<Active), "TNI", 2 );
+			uint16_t channel = *(uint16_t*)(start+1);
+			NumericValue* v = FindChannel(m_numericInputs, channel);
+			OIS_INFO( "<- TNI %d (%s)", channel, v?v->name.c_str():"UNKNOWN CHANNEL" );
+			if( v )
+				v->active = (payload & CL_TNI_PAYLOAD_T) ? true: false;
+			break;
+		}
+		case CL_DBG:
+		{
+			OIS_INFO( "<- DBG: %s", payload);
+			break;
+		}
+		case CL_EXC_0:
+		case CL_EXC_1:
+		case CL_EXC_2:
+		{
+			ExpectState( 1<<Active, "EXC", 2 );
+			uint16_t channel = 0;
+			switch( command )
+			{
+			default: eiASSUME(false);
+			case CL_EXC_0: channel = payload >> CL_PAYLOAD_SHIFT; break;
+			case CL_EXC_1: channel = *(uint8_t *)(start+1); break;
+			case CL_EXC_2: channel = *(uint16_t*)(start+1); break;
+			}
+			Event* e = FindChannel(m_events, channel);
+			if( e )
+				m_eventBuffer.push_back(channel);
+			OIS_INFO( "<- EXC: %d (%s)", channel, e ? e->name.c_str() : "INVALID CHANNEL" );
+			break;
+		}
+		case CL_VAL_1:
+		case CL_VAL_2:
+		case CL_VAL_3:
+		case CL_VAL_4:
+		{
+			if( !ExpectState( 1<<Active, "VAL", 2 ) )
+				return false;
+			int16_t channel = 0;
+			uint32_t extra = payload >> CL_PAYLOAD_SHIFT;
+			int16_t value = 0;
+			switch( command )
+			{
+			default: eiASSUME(false);
+			case CL_VAL_1: value = extra;                              channel = *(uint8_t *)(start+1);              break;
+			case CL_VAL_2: value = *(uint8_t *)(start+1)|(extra << 8); channel = *(uint8_t *)(start+2);              break;
+			case CL_VAL_3: value = *(uint16_t*)(start+1);              channel = *(uint8_t *)(start+2)|(extra << 8); break;
+			case CL_VAL_4: value = *(uint16_t*)(start+1);              channel = *(uint16_t*)(start+3);              break;
+			}
+			NumericValue* v = FindChannel(m_numericOutputs, channel);
+			if( v )
+			{
+				switch( v->type )
+				{
+				default: OIS_ASSERT( false );
+				case Boolean:  v->value.boolean = !!value; 
+					OIS_INFO( "<- %d(%s) = %s", channel, v->name.c_str(), v->value.boolean ? "true" : "false" );
+					break;
+				case Number:   v->value.number = value; 
+					OIS_INFO( "<- %d(%s) = %d", channel, v->name.c_str(), v->value.number );
+					break;
+				case Fraction: v->value.fraction = value/100.0f;
+					OIS_INFO( "<- %d(%s) = %.2f", channel, v->name.c_str(), v->value.fraction );
+					break;
+				}
+			}
+			else
+				OIS_WARN( "Received key/value message for unregistered channel %d", channel);
+		}
+		case CL_END:
+		{
+			OIS_INFO( "<- END");
+			if( m_connectionState != Handshaking )
+				ClearState();
+			m_port.Disconnect();
+			break;
+		}
+	}
+
+	return cmdLength;
+}
+
+bool OisDevice::ProcessAscii(char* cmd)
 {
 	if( !cmd[0] )
 		return false;
@@ -358,9 +613,11 @@ bool OisDevice::Process(char* cmd)
 			{
 				if( !ExpectState(1<<Handshaking, cmd, 1) )
 					ClearState();
+				char* mode = ZeroDelimiter(payload, ',');
+				bool binary = *mode == 'B';
 				int version = atoi(payload);
-				OIS_INFO( "<- SYN: %d", version );
-				if( version >= 1 && version <= 2 )
+				OIS_INFO( "<- SYN: %d/%s", version, binary?"B":"A" );
+				if( !(version == 1 && binary) && version >= 1 && version <= 2 )
 				{
 					switch( version )
 					{
@@ -369,6 +626,7 @@ bool OisDevice::Process(char* cmd)
 					case 2: SendLn("ACK=1,22RS"); break;
 					}
 					OIS_INFO( "-> ACK", version );
+					m_binary = binary;
 					m_protocolVersion = version;
 					m_connectionState = Synchronisation;
 				}
@@ -397,7 +655,7 @@ bool OisDevice::Process(char* cmd)
 				if( !ExpectState( (1<<Synchronisation)|(m_protocolVersion>1?1<<Active:0), cmd, 1 ) )
 					return false;
 				char* name = payload;
-				int channel = atoi(ZeroDelimiter(payload, ','));
+				uint16_t channel = (uint16_t)(0xFFFF & atoi(ZeroDelimiter(payload, ',')));
 				m_events.push_back({channel, OIS_STRING(name)});
 				OIS_INFO( "<- CMD: %d %s", channel, name );
 				break;
@@ -421,46 +679,33 @@ bool OisDevice::Process(char* cmd)
 					return false;
 				char* name = payload;
 				int channel = atoi(ZeroDelimiter(payload, ','));
+				uint16_t channel16 = (uint16_t)(channel & 0xFFFFU);
 				if( output )
 				{
-					m_numericOutputs.push_back({channel, OIS_STRING(name), nt});
+					m_numericOutputs.push_back({OIS_STRING(name), channel16, true, nt});
 					m_numericOutputs.back().value.number = 0;
 				}
 				else
 				{
-					m_numericInputs.push_back({channel, OIS_STRING(name), nt});
+					m_numericInputs.push_back({OIS_STRING(name), channel16, true, nt});
 					m_numericInputs.back().value.number = 0xcdcdcdcd;
 				}
-				OIS_INFO( "<- %s: %d %s", cmd, channel, name );
+				OIS_INFO( "<- %s: %d %s", cmd, channel16, name );
 				break;
 			}
-			case RNI:
-			case RNO:
-			case RCM:
+			case TNI:
 			{
 				ExpectState( (1<<Synchronisation) | (1<<Active), cmd, 2 );
+				const char* active = ZeroDelimiter(payload, ',');
 				int channel = atoi(payload);
-				auto fn = [this, cmd, channel](auto& vec, const char* type)
-				{
-					auto* e = FindChannel(vec, channel);
-					OIS_INFO( "<- %s %d (%s)", type, channel, e?e->name.c_str():"UNKNOWN CHANNEL" );
-					if( e )
-					{
-						std::swap(*e, vec.back());
-						vec.pop_back();
-					}
-				};
-				switch( type )
-				{
-				case RNI: fn(m_numericInputs, "RNI"); break;
-				case RNO: fn(m_numericOutputs, "RNO"); break;
-				case RCM: fn(m_events, "RCM"); break;
-				}
-				break;
+				NumericValue* v = FindChannel(m_numericInputs, channel);
+				OIS_INFO( "<- TNI %d (%s)", channel, v?v->name.c_str():"UNKNOWN CHANNEL" );
+				if( v )
+					v->active = atoi(active) ? true: false;
 			}
 			case ACT:
 			{
-				ExpectState( Synchronisation, cmd, 1 );
+				ExpectState( 1<<Synchronisation, cmd, 1 );
 				m_connectionState = Active;
 				OIS_INFO( "<- ACT" );
 				break;
@@ -468,7 +713,7 @@ bool OisDevice::Process(char* cmd)
 
 			case EXC:
 			{
-				ExpectState( Active, cmd, 1 );
+				ExpectState( 1<<Active, cmd, 1 );
 				int channel = atoi(payload);
 				Event* e = FindChannel(m_events, channel);
 				if( e )
@@ -506,15 +751,18 @@ void OisDevice::SetInput(const NumericValue& input, Value value)
 	m_numericInputs[index].value = value;
 	m_queuedInputs.push_back(index);
 }
+
 void OisDevice::Send(const char* cmd)
 {
 	m_port.Write(cmd, (int)strlen(cmd));
 }
+
 void OisDevice::SendLn(const char* cmd)
 {
 	Send(cmd);
 	m_port.Write("\n", 1);
 }
+
 bool OisDevice::ExpectState(DeviceStateMask state, const char* cmd, unsigned version)
 {
 	if( m_protocolVersion < version )
@@ -532,10 +780,12 @@ bool OisDevice::ExpectState(DeviceStateMask state, const char* cmd, unsigned ver
 	}
 	return true;
 }
+
 void OisDevice::ClearState()
 {
 	m_connectionState = Handshaking;
 	m_protocolVersion = 1;
+	m_binary = false;
 	m_pid = OIS_FOURCC("NULL");
 	m_vid = OIS_FOURCC("OIS\0");
 	m_deviceNameOverride = "";
