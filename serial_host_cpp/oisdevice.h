@@ -53,6 +53,14 @@ struct OIS_STRING_BUILDER
 		va_end( v );
 		return s;
 	}
+	const char* FormatV(OIS_STRING& result, const char* fmt, const va_list& v)
+	{
+		int length = _vscprintf( fmt, v ) + 1;
+		result.resize(length);
+		char* buffer = &result[0];
+		vsnprintf(buffer, length, fmt, v);
+		return buffer;
+	}
 	char* AllocTemp(unsigned bytes)
 	{
 		temp.resize(bytes);
@@ -64,14 +72,6 @@ struct OIS_STRING_BUILDER
 	}
 private:
 	OIS_STRING temp;
-	const char* FormatV(OIS_STRING& result, const char* fmt, const va_list& v)
-	{
-		int length = _vscprintf( fmt, v ) + 1;
-		result.resize(length);
-		char* buffer = &result[0];
-		vsnprintf(buffer, length, fmt, v);
-		return buffer;
-	}
 };
 #endif
 
@@ -156,9 +156,30 @@ public:
 		NumericType type;
 		Value       value;
 	};
+	struct Event
+	{
+		uint16_t channel;
+		OIS_STRING name;
+	};
 	
-	const OIS_VECTOR<NumericValue>& DeviceInputs()  { return m_numericInputs; }
-	const OIS_VECTOR<NumericValue>& DeviceOutputs() { return m_numericOutputs; }
+	const OIS_VECTOR<NumericValue>& DeviceInputs()  const { return m_numericInputs; }
+	const OIS_VECTOR<NumericValue>& DeviceOutputs() const { return m_numericOutputs; }
+	const OIS_VECTOR<Event>&        DeviceEvents()  const { return m_events; }
+
+	template<class T>
+	bool PopEvents(T& fn)
+	{
+		if( m_eventBuffer.empty() )
+			return false;
+		for( uint16_t channel : m_eventBuffer )
+		{
+			Event* e = FindChannel(m_events, channel);
+			if( e )
+				fn(*e);
+		}
+		m_eventBuffer.clear();
+		return true;
+	}
 
 	void SetInput(const NumericValue& input, Value value);
 private:
@@ -255,11 +276,6 @@ private:
 	char m_commandBuffer[OIS_MAX_COMMAND_LENGTH*2];
 	unsigned m_commandLength;
 	
-	struct Event
-	{
-		uint16_t channel;
-		OIS_STRING name;
-	};
 	OIS_VECTOR<NumericValue> m_numericInputs;
 	OIS_VECTOR<NumericValue> m_numericOutputs;
 	OIS_VECTOR<uint16_t>     m_queuedInputs;
@@ -274,6 +290,7 @@ private:
 				return &v;
 		return nullptr;
 	}
+	template<class T> static T Clamp( T x, T min, T max ) { return x < min ? min : (x > max ? max : x); }
 };
 
 #ifdef OIS_DEVICE_IMPL
@@ -533,16 +550,9 @@ int OisDevice::ProcessBinary(char* start, char* end)
 			                (payload & CL_N_PAYLOAD_N ? Number : Boolean);
 			uint16_t channel = *(uint16_t*)(start+1);
 			char* name = start+3;
-			if( output )
-			{
-				m_numericOutputs.push_back({OIS_STRING(name), channel, true, nt});
-				m_numericOutputs.back().value.number = 0;
-			}
-			else
-			{
-				m_numericInputs.push_back({OIS_STRING(name), channel, true, nt});
-				m_numericInputs.back().value.number = 0xcdcdcdcd;
-			}
+			OIS_VECTOR<NumericValue>& vec = output ? m_numericOutputs : m_numericInputs;
+			vec.push_back({OIS_STRING(name), channel, true, nt});
+			vec.back().value.number = 0;
 			OIS_INFO( "<- NIO: %d %s (%s %s)", channel, name, output?"Out":"In", nt==Fraction?"Fraction":(nt==Number?"Number":"Boolean") );
 			break;
 		}
@@ -577,7 +587,7 @@ int OisDevice::ProcessBinary(char* start, char* end)
 			uint16_t extra = (uint16_t)(payload >> CL_PAYLOAD_SHIFT);
 			switch( command )
 			{
-			default: eiASSUME(false);
+			default: OIS_ASSUME(false);
 			case CL_EXC_0: channel = extra; break;
 			case CL_EXC_1: channel = (*(uint8_t *)(start+1)) | (extra<<8); break;
 			case CL_EXC_2: channel = (*(uint16_t*)(start+1)); break;
@@ -600,7 +610,7 @@ int OisDevice::ProcessBinary(char* start, char* end)
 			int16_t value = 0;
 			switch( command )
 			{
-			default: eiASSUME(false);
+			default: OIS_ASSUME(false);
 			case CL_VAL_1: value = extra;                              channel = *(uint8_t *)(start+1);              break;
 			case CL_VAL_2: value = *(uint8_t *)(start+1)|(extra << 8); channel = *(uint8_t *)(start+2);              break;
 			case CL_VAL_3: value = *(uint16_t*)(start+1);              channel = *(uint8_t *)(start+3)|(extra << 8); break;
@@ -688,7 +698,6 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 			{
 				if( !ExpectState(1<<Handshaking, cmd, 1) )
 					ClearState();
-				m_port.PurgeReadBuffer();
 				char* mode = ZeroDelimiter(payload, ',');
 				bool binary = *mode == 'B';
 				int version = atoi(payload);
@@ -756,16 +765,9 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 				char* name = payload;
 				int channel = atoi(ZeroDelimiter(payload, ','));
 				uint16_t channel16 = (uint16_t)(channel & 0xFFFFU);
-				if( output )
-				{
-					m_numericOutputs.push_back({OIS_STRING(name), channel16, true, nt});
-					m_numericOutputs.back().value.number = 0;
-				}
-				else
-				{
-					m_numericInputs.push_back({OIS_STRING(name), channel16, true, nt});
-					m_numericInputs.back().value.number = 0xcdcdcdcd;
-				}
+				OIS_VECTOR<NumericValue>& vec = output ? m_numericOutputs : m_numericInputs;
+				vec.push_back({OIS_STRING(name), channel16, true, nt});
+				vec.back().value.number = 0;
 				OIS_INFO( "<- %s: %d %s", cmd, channel16, name );
 				break;
 			}
