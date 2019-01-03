@@ -106,6 +106,7 @@ Handshaking still occurs in ASCII; communication swtiches to binary after a requ
 | SV_VAL  | 0x01 / 0x02 / 0x03 / 0x04                 | 2/3/4/5  | Key/value updates                        | ✓         |             |          |           | ✓         |
 | END     | 0x45 / 'E' (END\n)                        | 4        | ASCII END command                        | ✓         | ✓           |          | ✓         | ✓         |
 | SYN     | 0x53 / 'S' / (SYN=)                       | 5+       | ASCII SYN command                        |           | ✓           | ✓        | ✓         | ✓         |
+
 Even though handshaking must complete before binary communication begins, host implementations should correctly handle an ASCII SYN command, as these can occur if a controller is power-cycled after a connection is established. 
 
 # Transmission formats
