@@ -74,6 +74,8 @@ struct
 	
 	float axisValues[8] = {};
 	bool buttonValues[128] = {};
+	int numButtons = 0;
+	int numAxes = 0;
 }g;
 void OisLog(const char* category, const char* fmt, ...)
 {
@@ -272,6 +274,21 @@ void DoVJoyGui(struct nk_context* ctx)
 		VJoy_Shutdown();
 		return;
 	}
+
+	if( g.numAxes )
+		nk_label(ctx, "Axes", NK_TEXT_ALIGN_LEFT);
+	for( int i=0; i!=g.numAxes; ++i )
+		nk_slider_float(ctx, -1, &g.axisValues[i], 1, 0.1f);
+
+	if( g.numButtons )
+		nk_label(ctx, "Buttons", NK_TEXT_ALIGN_LEFT);
+    nk_layout_row_dynamic(ctx, 30, 5);
+	for( int i=0; i!=g.numButtons; ++i )
+	{
+		char label[32];
+		sprintf(label, "Btn%d", i);
+		nk_check_label(ctx, label, g.buttonValues[i]);
+	}
 }
 
 void DoVJoyUpdate()
@@ -312,6 +329,8 @@ void DoVJoyUpdate()
 				g.axisValues[numAxes++] = it->value.fraction / (MAXSHORT/100.0f);
 		}
 	}
+	g.numButtons = numButtons;
+	g.numAxes = numAxes;
 
 	VJoy_Update(numAxes, g.axisValues, numButtons, g.buttonValues);
 }
@@ -355,6 +374,8 @@ void MainLoop(struct nk_context* ctx)
 		DoVJoyGui(ctx);
 	}
 	nk_end(ctx);
+
+	DoVJoyUpdate();
 }
 
 static LRESULT CALLBACK WindowProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
