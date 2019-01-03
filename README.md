@@ -41,11 +41,11 @@ This library is a work in progress. Contributors welcome!
 
 Device  requests a connection from the host, negotiates the protocol version.
 
-#### Synchronisation (SYNC)
+#### Synchronisation (SYN)
 
 Device registers inputs, outputs and commands that it can send/receive.
 
-#### Active
+#### Active (ACT)
 
 Device and host send/receive values and commands.
 
@@ -57,25 +57,25 @@ Device and host send/receive values and commands.
 
 ### Protocol messages (ASCII)
 
-| Command |                                                | Host send | Device send | HS state | SYNC state | Active state |
-| ------- | ---------------------------------------------- | --------- | ----------- | -------- | ---------- | ------------ |
-| SYN     | Begin Synchronisation stage                    |           | ✓           | ✓        |            |              |
-| ACK     | Acknowledge connection                         | ✓         |             |          |            |              |
-| DEN     | Deny connection                                | ✓         |             |          |            |              |
-| PID     | Register device name/ID                        |           | ✓₂          |          | ✓₂         |              |
-| CMD     | Register command                               |           | ✓           |          | ✓          | ✓₂           |
-| NIB     | Add numeric input (boolean) registration       |           | ✓           |          | ✓          | ✓₂           |
-| NIN     | Add numeric input (number) registration        |           | ✓           |          | ✓          | ✓₂           |
-| NIF     | Add numeric input (fraction) registration      |           | ✓           |          | ✓          | ✓₂           |
-| NOB     | Add numeric output (boolean) registration      |           | ✓₂          |          | ✓₂         | ✓₂           |
-| NON     | Add numeric output(number) registration        |           | ✓₂          |          | ✓₂         | ✓₂           |
-| NOF     | Add numeric output (fraction) registration     |           | ✓₂          |          | ✓₂         | ✓₂           |
-| TNI     | Toggle numeric input activity                  |           | ✓₂          |          | ✓₂         | ✓₂           |
-| ACT     | End synchronisation state / begin active state |           | ✓           |          | ✓          |              |
-| EXC     | Execute command                                |           | ✓           |          |            | ✓            |
-| DBG     | Debug messaging                                |           | ✓           | ✓₂       | ✓₂         | ✓            |
-| #       | Key/value updates                              | ✓         | ✓₂          |          |            | ✓            |
-| END     | Return to handshake stage                      | ✓₂        | ✓₂          |          | ✓₂         | ✓₂           |
+| Command |                                                | Host send | Device send | HS state | SYNC state | ACT state |
+| ------- | ---------------------------------------------- | --------- | ----------- | -------- | ---------- | --------- |
+| SYN     | Begin Synchronisation stage                    |           | ✓           | ✓        |            |           |
+| ACK     | Acknowledge connection                         | ✓         |             |          |            |           |
+| DEN     | Deny connection                                | ✓         |             |          |            |           |
+| PID     | Register device name/ID                        |           | ✓₂          |          | ✓₂         |           |
+| CMD     | Register command                               |           | ✓           |          | ✓          | ✓₂        |
+| NIB     | Add numeric input (boolean) registration       |           | ✓           |          | ✓          | ✓₂        |
+| NIN     | Add numeric input (number) registration        |           | ✓           |          | ✓          | ✓₂        |
+| NIF     | Add numeric input (fraction) registration      |           | ✓           |          | ✓          | ✓₂        |
+| NOB     | Add numeric output (boolean) registration      |           | ✓₂          |          | ✓₂         | ✓₂        |
+| NON     | Add numeric output(number) registration        |           | ✓₂          |          | ✓₂         | ✓₂        |
+| NOF     | Add numeric output (fraction) registration     |           | ✓₂          |          | ✓₂         | ✓₂        |
+| TNI     | Toggle numeric input activity                  |           | ✓₂          |          | ✓₂         | ✓₂        |
+| ACT     | End synchronisation state / begin active state |           | ✓           |          | ✓          |           |
+| EXC     | Execute command                                |           | ✓           |          |            | ✓         |
+| DBG     | Debug messaging                                |           | ✓           | ✓₂       | ✓₂         | ✓         |
+| #       | Key/value updates                              | ✓         | ✓₂          |          |            | ✓         |
+| END     | Return to handshake stage                      | ✓₂        | ✓₂          |          | ✓₂         | ✓₂        |
 
 ₂ = introduced in version 2
 
@@ -83,17 +83,17 @@ Device and host send/receive values and commands.
 
 Handshaking still occurs in ASCII; communication swtiches to binary after a request to use the binary protocol is accepted with an ACK message from the host.
 
-| Command       | Hex                                       |                                                | Host send | Device send | HS state | SYNC state | Active state |
-| ------------- | ----------------------------------------- | ---------------------------------------------- | --------- | ----------- | -------- | ---------- | ------------ |
-| CL_CMD        | 0x01                                      | Register command                               |           | ✓           |          | ✓          | ✓            |
-| CL_NIO        | 0x02 / 0x12 / 0x22 / 0x42 / 0x52 / 0x62 / | Add numeric input or output registration       |           | ✓           |          | ✓          | ✓            |
-| CL_ACT        | 0x03                                      | End synchronisation state / begin active state |           | ✓           |          | ✓          |              |
-| DBG           | 0x04                                      | Debug messaging                                |           | ✓           | ✓        | ✓          | ✓            |
-| CL_TNI        | 0x05 / 0x15                               | Toggle numeric input activity                  |           | ✓           |          | ✓          | ✓            |
-| CL_PID        | 0x06                                      | Register device name/ID                        |           | ✓           |          | ✓          |              |
-| CL_EXC0/1/2   | 0x0C / 0x0D / 0x0E                        | Execute command                                |           | ✓           |          |            | ✓            |
-| CL_VAL1/2/3/4 | 0x08 / 0x09 / 0x0A / 0x0B                 | Key/value updates                              |           | ✓           |          |            | ✓            |
-| SV_VAL1/2/3/4 | 0x01 / 0x02 / 0x03 / 0x04                 | Key/value updates                              | ✓         |             |          |            | ✓            |
+| Command        | Hex                                       | Bytes    |                                          | Host send | Device send | HS state | SYN state | ACT state |
+| -------------- | ----------------------------------------- | -------- | ---------------------------------------- | --------- | ----------- | -------- | --------- | --------- |
+| CL_CMD         | 0x01                                      | 3+string | Register command                         |           | ✓           |          | ✓         | ✓         |
+| CL_NIO         | 0x02 / 0x12 / 0x22 / 0x42 / 0x52 / 0x62 / | 3+string | Add numeric input or output registration |           | ✓           |          | ✓         | ✓         |
+| CL_ACT         | 0x03                                      | 1        | End sync state / begin active state      |           | ✓           |          | ✓         |           |
+| CL_DBG         | 0x04                                      | 1+string | Debug messaging                          |           | ✓           | ✓        | ✓         | ✓         |
+| CL_TNI         | 0x05 / 0x15                               | 3        | Toggle numeric input activity            |           | ✓           |          | ✓         | ✓         |
+| CL_PID         | 0x06                                      | 9+string | Register device name/ID                  |           | ✓           |          | ✓         |           |
+| CL_EXC 0/1/2   | 0x0C / 0x0D / 0x0E                        | 1/2/3    | Execute command                          |           | ✓           |          |           | ✓         |
+| CL_VAL 1/2/3/4 | 0x08 / 0x09 / 0x0A / 0x0B                 | 2/3/4/5  | Key/value updates                        |           | ✓           |          |           | ✓         |
+| SV_VAL 1/2/3/4 | 0x01 / 0x02 / 0x03 / 0x04                 | 2/3/4/5  | Key/value updates                        | ✓         |             |          |           | ✓         |
 # Transmission formats
 
 TODO: Binary / ASCII description
