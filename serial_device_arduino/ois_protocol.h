@@ -93,38 +93,34 @@ class OisProfiler
 public:
   void loop(OisState& ois)
   {
-    unsigned long us = micros();
-    unsigned long ms = millis();
-    unsigned long profileDt = profileMs ? ms - prevMs : us - prevUs;
-    unsigned long profileTime = profileMs ? ms : us;
-    prevMs = ms;
-    prevUs = us;
-  
-    perfCount += profileDt;
-    if( profileTime - prevReportTime > (profileMs?30000:30000000) )
+    unsigned long profileTime = micros();
+    unsigned long profileDt = profileTime - prevTime;
+    prevTime = profileTime;
+
+    const unsigned long freq = 10;
+
+    ++loopCount;
+    timer += profileDt;
+    if( timer > (freq*1000*1000) )
     {
-      unsigned long reportLength = profileTime - prevReportTime;
-      prevReportTime = profileMs ? ms : us;
-      profileDt = (perfCount + (reportLength>>1)) / reportLength;
-      perfCount = 0;
+      profileDt = (timer + (loopCount>>1)) / loopCount;
+      timer = 0;
+      loopCount = 0;
+
+      bool profileMs = profileDt > 3000;
+      if( profileMs )
+        profileDt = (profileDt + 500) / 1000;
   
       char buf[32] = "Loop Rate: ";
       ltoa( profileDt, buf+11, 10 );
       strcat(buf+11, profileMs?"ms":"us");
       ois_print( ois, buf );
-      
-      if( profileMs && profileDt <= 1 )
-        profileMs = false;
-      else if( !profileMs && profileDt > 2000 )
-        profileMs = true;
     }
   }
 private:
-  unsigned long perfCount = 0;
-  unsigned long prevReportTime = 0;
-  unsigned long prevUs = 0;
-  unsigned long prevMs = 0;
-  bool profileMs = true;
+  unsigned long timer = 0;
+  unsigned long loopCount = 0;
+  unsigned long prevTime = 0;
 };
 
 

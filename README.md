@@ -3,10 +3,19 @@ Custom user input/output devices for games.
 
 ## Background
 
-This project is inspired by an an extension of the serial protocol developed by Flat Earth Games for Objects In Space:
+This project is inspired by an an extension of the serial protocol developed by Flat Earth Games for Objects In Space, described here:
 
-http://objectsgame.com/the-controllers/arduino-tutorial/
-http://objectsgame.com/the-controllers/ois-serial-data-protocol/
+- http://objectsgame.com/the-controllers/arduino-tutorial/
+
+- http://objectsgame.com/the-controllers/ois-serial-data-protocol/
+
+
+And with existing library support here:
+
+- https://github.com/Segwegler/OIS_Library
+
+- https://bitbucket.org/pjhardy/arduinosinspace/src/master/
+
 
 By adding support for the OIS protocol to your game, your users can create their own physical input devices using hobbyist hardware such as Arduino.
 
@@ -23,15 +32,16 @@ This project defines a communication specification, plus reference implementatio
 
 This library is a work in progress. Contributors welcome!
 
-- Test the Arduino device code against Objects In Space game for compatibility with their "v1" spec.
-- Test the C++ host code against other Arduinos In Space for compatibility with the "v1" spec.
-- Collaborate with the community to nail down an ideal "v2" spec.
-- More testing of the binary communication mode.
-- Example implementations in other languages (C#?).
-- Other transport mechanisms besides serial ports (Websockets, HTTP, TCP Sockets, Pipes, Shared Memory?).
-- Port to platforms other than Windows.
-- Game Engine examples (Unity, Unreal?).
-- Add an example host application that translates the OIS device into a virtual Direct Input device using vJoy.
+- [ ] Documentation!
+- [ ] Test the Arduino device code against Objects In Space game for compatibility with their "v1" spec.
+- [ ] Test the C++ host code against other Arduinos In Space for compatibility with the "v1" spec.
+- [ ] Collaborate with the community to nail down an ideal "v2" spec.
+- [ ] More testing of the binary communication mode.
+- [ ] Example implementations in other languages (C#?).
+- [ ] Other transport mechanisms besides serial ports (Websockets, HTTP, TCP Sockets, Pipes, Shared Memory?).
+- [ ] Port to platforms other than Windows.
+- [ ] Game Engine examples (Unity, Unreal?).
+- [ ] Add an example host application that translates the OIS device into a virtual Direct Input device using vJoy.
 
 ## Protocol Overview
 
@@ -59,9 +69,9 @@ Device and host send/receive values and commands.
 
 | Command |                                                | Host send | Device send | HS state | SYNC state | ACT state |
 | ------- | ---------------------------------------------- | --------- | ----------- | -------- | ---------- | --------- |
-| SYN     | Begin Synchronisation stage                    |           | ✓           | ✓        |            |           |
-| ACK     | Acknowledge connection                         | ✓         |             |          |            |           |
-| DEN     | Deny connection                                | ✓         |             |          |            |           |
+| SYN     | Begin Synchronisation stage                    |           | ✓           | ✓        | ✓₂         | ✓₂        |
+| ACK     | Acknowledge connection                         | ✓         |             | ✓        |            |           |
+| DEN     | Deny connection                                | ✓         |             | ✓        |            |           |
 | PID     | Register device name/ID                        |           | ✓₂          |          | ✓₂         |           |
 | CMD     | Register command                               |           | ✓           |          | ✓          | ✓₂        |
 | NIB     | Add numeric input (boolean) registration       |           | ✓           |          | ✓          | ✓₂        |
@@ -83,17 +93,21 @@ Device and host send/receive values and commands.
 
 Handshaking still occurs in ASCII; communication swtiches to binary after a request to use the binary protocol is accepted with an ACK message from the host.
 
-| Command        | Hex                                       | Bytes    |                                          | Host send | Device send | HS state | SYN state | ACT state |
-| -------------- | ----------------------------------------- | -------- | ---------------------------------------- | --------- | ----------- | -------- | --------- | --------- |
-| CL_CMD         | 0x01                                      | 3+string | Register command                         |           | ✓           |          | ✓         | ✓         |
-| CL_NIO         | 0x02 / 0x12 / 0x22 / 0x42 / 0x52 / 0x62 / | 3+string | Add numeric input or output registration |           | ✓           |          | ✓         | ✓         |
-| CL_ACT         | 0x03                                      | 1        | End sync state / begin active state      |           | ✓           |          | ✓         |           |
-| CL_DBG         | 0x04                                      | 1+string | Debug messaging                          |           | ✓           | ✓        | ✓         | ✓         |
-| CL_TNI         | 0x05 / 0x15                               | 3        | Toggle numeric input activity            |           | ✓           |          | ✓         | ✓         |
-| CL_PID         | 0x06                                      | 9+string | Register device name/ID                  |           | ✓           |          | ✓         |           |
-| CL_EXC 0/1/2   | 0x0C / 0x0D / 0x0E                        | 1/2/3    | Execute command                          |           | ✓           |          |           | ✓         |
-| CL_VAL 1/2/3/4 | 0x08 / 0x09 / 0x0A / 0x0B                 | 2/3/4/5  | Key/value updates                        |           | ✓           |          |           | ✓         |
-| SV_VAL 1/2/3/4 | 0x01 / 0x02 / 0x03 / 0x04                 | 2/3/4/5  | Key/value updates                        | ✓         |             |          |           | ✓         |
+| Command | Code                                      | Bytes    |                                          | Host send | Device send | HS state | SYN state | ACT state |
+| ------- | ----------------------------------------- | -------- | ---------------------------------------- | --------- | ----------- | -------- | --------- | --------- |
+| CL_CMD  | 0x01                                      | 3+string | Register command                         |           | ✓           |          | ✓         | ✓         |
+| CL_NIO  | 0x02 / 0x12 / 0x22 / 0x42 / 0x52 / 0x62 / | 3+string | Add numeric input or output registration |           | ✓           |          | ✓         | ✓         |
+| CL_ACT  | 0x03                                      | 1        | End sync state / begin active state      |           | ✓           |          | ✓         |           |
+| CL_DBG  | 0x04                                      | 1+string | Debug messaging                          |           | ✓           | ✓        | ✓         | ✓         |
+| CL_TNI  | 0x05 / 0x15                               | 3        | Toggle numeric input activity            |           | ✓           |          | ✓         | ✓         |
+| CL_PID  | 0x06                                      | 9+string | Register device name/ID                  |           | ✓           |          | ✓         |           |
+| CL_EXC  | 0x0C / 0x0D / 0x0E                        | 1/2/3    | Execute command                          |           | ✓           |          |           | ✓         |
+| CL_VAL  | 0x08 / 0x09 / 0x0A / 0x0B                 | 2/3/4/5  | Key/value updates                        |           | ✓           |          |           | ✓         |
+| SV_VAL  | 0x01 / 0x02 / 0x03 / 0x04                 | 2/3/4/5  | Key/value updates                        | ✓         |             |          |           | ✓         |
+| END     | 0x45 / 'E' (END\n)                        | 4        | ASCII END command                        | ✓         | ✓           |          | ✓         | ✓         |
+| SYN     | 0x53 / 'S' / (SYN=)                       | 5+       | ASCII SYN command                        |           | ✓           | ✓        | ✓         | ✓         |
+Even though handshaking must complete before binary communication begins, host implementations should correctly handle an ASCII SYN command, as these can occur if a controller is power-cycled after a connection is established. 
+
 # Transmission formats
 
 TODO: Binary / ASCII description
