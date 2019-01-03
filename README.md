@@ -13,6 +13,10 @@ And with existing library support here:
 - https://github.com/Segwegler/OIS_Library
 - https://bitbucket.org/pjhardy/arduinosinspace/src/master/
 
+These existing libraries and specification are referred to as "v1" here, with this project presented as a proposal for a possible "v2".
+
+## Goals
+
 By adding support for the OIS protocol to your game, your users can create their own physical input devices using hobbyist hardware such as Arduino.
 
 Use cases:
@@ -30,7 +34,7 @@ This library is a work in progress. Contributors welcome!
 
 - [ ] Documentation!
 - [ ] Test the Arduino device code against Objects In Space game for compatibility with their "v1" spec.
-- [ ] Test the C++ host code against other Arduinos In Space for compatibility with the "v1" spec.
+- [ ] Test the C++ host code against other arduino libraries (e.g. Arduinos In Space) for compatibility with the "v1" spec.
 - [ ] Collaborate with the community to nail down an ideal "v2" spec.
 - [ ] More testing of the binary communication mode.
 - [ ] Example implementations in other languages (C#?).
@@ -57,9 +61,12 @@ Device and host send/receive values and commands.
 
 ### Types
 
-- Boolean - 0/1
+- Boolean - true or false
+  - 0 or 1
 - Number - 16 bit signed integer
+  - -32768 to 32767
 - Fraction - 16 bit signed integer, scaled by 100 (i.e. The number 1.5 is encoded as 150)
+  - -327.68 to 327.67
 
 ### Protocol messages (ASCII)
 
@@ -81,7 +88,7 @@ Device and host send/receive values and commands.
 | EXC     | Execute command                                |           | ✓           |          |            | ✓         |
 | DBG     | Debug messaging                                |           | ✓           | ✓₂       | ✓₂         | ✓         |
 | #       | Numeric input/output key/value                 | ✓         | ✓₂          |          |            | ✓         |
-| END     | Return to handshake stage                      | ✓₂        | ✓₂          |          | ✓₂         | ✓₂        |
+| END     | Reset to handshake stage                       | ✓₂        | ✓₂          | ✓₂       | ✓₂         | ✓₂        |
 
 ₂ = introduced in version 2
 
@@ -105,11 +112,11 @@ Handshaking still occurs in ASCII; communication swtiches to binary after a requ
 
 Even though handshaking must complete before binary communication begins, host implementations should correctly handle an ASCII SYN command, as these can occur if a controller is power-cycled after a connection is established. 
 
-# Transmission formats
+## Transmission formats
 
 TODO: Binary / ASCII description
 
-# Implementations
+## Implementations
 
 TODO: How to use / configure
 
@@ -117,17 +124,17 @@ TODO: How to use / configure
   - serial_device_arduino / example
 - serial_host_cpp
 
-# ASCII Protocol in-depth
+## ASCII Protocol in-depth
 
 TODO - details
 
-# Binary Protocol in-depth
+For now, see the [Objects In Space specification](http://objectsgame.com/the-controllers/ois-serial-data-protocol/), although it does contain some errata and no details on v2 commands... sorry.
 
-TODO - details
+## Binary Protocol in-depth
 
-## Device to Host (Client) messages
+### Device to Host (Client) messages
 
-Device to host messages take up 1 or more bytes, with a message type identifier in the lowest 4 bits of the first byte. The high 4 bits of some message types is used to store additional message data. Unless the message type contains a string, the size of a message in bytes can be determined from the type parameter alone.
+Device to host messages take up 1 or more bytes, with a message type identifier in the lowest 4 bits of the first byte. The high 4 bits of some message types are used to store additional message data. Unless the message type contains a string, the size of a message in bytes can be determined from the type parameter alone.
 
 ```c
 | Byte 0        || Byte 1+       ||
@@ -147,19 +154,19 @@ For example, a DBG message header is a single byte, followed by a string. A DBG 
 | 0x04          ||
 ```
 
-### Command byte layouts
+#### Message byte layouts
 
 | Command  | Type | Extra                                                        | Following bytes                                              |
 | -------- | ---- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | CL_CMD   | 0x1  | Must be 0                                                    | Byte 1: Low byte of channel ID<br />Byte 2: High byte of channel ID<br />Byte 3+: String event name |
 | CL_NIO   | 0x2  | Bitmask of:<br />0x1: Number (N\*N)<br />0x2: Fraction (N\*F)<br />0x4: Output (NO\*) | Byte 1: Low byte of channel ID<br />Byte 2: High byte of channel ID<br />Byte 3+: String input/output name |
 | CL_ACT   | 0x3  | Must be 0                                                    | None                                                         |
-| CL_DBG   | 0x4  | Must be 0                                                    | Byte 1: String debug message                                 |
+| CL_DBG   | 0x4  | Must be 0                                                    | Byte 1+: String debug message                                |
 | CL_TNI   | 0x5  | 0x0: False / deactivate<br />0x1: True / activate            | Byte 1: Low byte of hannel ID<br />Byte 2: High byte of channel ID |
 | CL_PID   | 0x6  | Must be 0                                                    | Bytes [1-4]: Product ID (32bit little endian)<br />Bytes [5-8]: Vendor ID (32bit little endian)<br />Byte 9+: Device name |
-| CL_EXC0  | 0xC  | Channel ID <br />(low 4 bits)                                | None                                                         |
-| CL_EXC1  | 0xD  | High byte of the channel ID <br />(low 4 bits)               | Byte 1: Low byte of hannel ID                                |
-| CL_EXC2  | 0xE  | Must be 0                                                    | Byte 1: Low byte of hannel ID<br />Byte 2: High byte of channel ID |
+| CL_EXC_0 | 0xC  | Channel ID <br />(low 4 bits)                                | None                                                         |
+| CL_EXC_1 | 0xD  | High byte of the channel ID <br />(low 4 bits)               | Byte 1: Low byte of hannel ID                                |
+| CL_EXC_2 | 0xE  | Must be 0                                                    | Byte 1: Low byte of hannel ID<br />Byte 2: High byte of channel ID |
 | CL_VAL_1 | 0x8  | Value<br />(low 4 bits)                                      | Byte 1: Low byte of the channel ID                           |
 | CL_VAL_2 | 0x9  | High byte of value<br />(low 4 bits)                         | Byte 1: Low byte of value<br />Byte 2: Low byte of channel ID |
 | CL_VAL_3 | 0xA  | High byte of channel ID<br />(low 4 bits)                    | Byte 1: Low byte of value<br />Byte 2: High byte of value<br />Byte 3: Low byte of channel ID |
@@ -167,9 +174,9 @@ For example, a DBG message header is a single byte, followed by a string. A DBG 
 | END      | 0x4  | 0x5                                                          | Byte 1: 'N' (0x4E)<br />Byte 2: 'D' (0x44)<br />Byte 3: '\n' (0x0A) |
 | SYN      | 0x3  | 0x5                                                          | Byte 1: 'Y' (0x59)<br />Byte 2: 'N' (0x4E)<br />Byte 3: '=' (0x3D) |
 
-## Host to Device (Server) messages
+### Host to Device (Server) messages
 
-Device to host messages take up 1 or more bytes, with a message type identifier in the lowest 3 bits of the first byte. The high 5 bits of some message types is used to store additional message data. The size of a message in bytes can be determined from the type parameter alone.
+Device to host messages take up 1 or more bytes, with a message type identifier in the lowest 3 bits of the first byte. The high 5 bits of some message types are used to store additional message data. The size of a message in bytes can be determined from the type parameter alone.
 
 ```c
 | Byte 0        || Byte 1+       ||
@@ -178,7 +185,7 @@ Device to host messages take up 1 or more bytes, with a message type identifier 
 ```
 
 
-### Message byte layouts 
+#### Message byte layouts 
 
 | Command  | Type | Extra                                     | Following bytes                                              |
 | -------- | ---- | ----------------------------------------- | ------------------------------------------------------------ |
@@ -188,4 +195,25 @@ Device to host messages take up 1 or more bytes, with a message type identifier 
 | SV_VAL_4 | 0x4  | Must be 0                                 | Byte 1: Low byte of value<br />Byte 2: High byte of value<br />Byte 3: Low byte of channel ID<br />Byte 4: High byte of channel ID |
 | END      | 0x4  | 0x5                                       | Byte 1: 'N' (0x4E)<br />Byte 2: 'D' (0x44)<br />Byte 3: '\n' (0x0A) |
 
- 
+###  EXC and VAL commands
+
+The EXC (*execute command*) and VAL (*set numeric input/output value*) commands have a total of 11 different variants which can be used to reduce message sizes. The limits of each of these commands is listed below. 
+*n.b. "value" here is the numeric value when interpreted as an **unsigned** integer (uint16_t in C/C++).*
+
+| Command  | Size in bytes | Limitation                     |
+| -------- | ------------- | :----------------------------- |
+| CL_EXC0  | 1             | channel < 16                   |
+| CL_EXC1  | 2             | channel < 4096                 |
+| CL_EXC2  | 3             | any channel                    |
+| CL_VAL_1 | 2             | channel < 256 AND value < 16   |
+| CL_VAL_2 | 3             | channel < 256 AND value < 4096 |
+| CL_VAL_3 | 4             | channel < 4096                 |
+| CL_VAL_4 | 5             | any channel / value            |
+| SV_VAL_1 | 2             | channel < 256 AND value < 32   |
+| SV_VAL_2 | 3             | channel < 256 AND value < 8192 |
+| SV_VAL_3 | 4             | channel < 8192                 |
+| SV_VAL_4 | 5             | any channel / value            |
+
+## License
+
+[MIT](COPYING)
