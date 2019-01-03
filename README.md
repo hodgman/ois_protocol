@@ -19,6 +19,20 @@ Use cases:
 
 This project defines a communication specification, plus reference implementations that can be dropped into your games / input devices.
 
+## TODO
+
+This library is a work in progress. Contributors welcome!
+
+- Test the Arduino device code against Objects In Space game for compatibility with their "v1" spec.
+- Test the C++ host code against other Arduinos In Space for compatibility with the "v1" spec.
+- Collaborate with the community to nail down an ideal "v2" spec.
+- More testing of the binary communication mode.
+- Example implementations in other languages (C#?).
+- Other transport mechanisms besides serial ports (Websockets, HTTP, TCP Sockets, Pipes, Shared Memory?).
+- Port to platforms other than Windows.
+- Game Engine examples (Unity, Unreal?).
+- Add an example host application that translates the OIS device into a virtual Direct Input device using vJoy.
+
 ## Protocol Overview
 
 ### Protocol states
@@ -67,30 +81,30 @@ Device and host send/receive values and commands.
 
 ### Protocol messages (binary)
 
-Binary transmission is currently WIP.
+Handshaking still occurs in ASCII; communication swtiches to binary after a request to use the binary protocol is accepted with an ACK message from the host.
 
-| Command    | Hex                       |                                                | Host send | Device send | HS state | SYNC state | Active state |
-| ---------- | ------------------------- | ---------------------------------------------- | --------- | ----------- | -------- | ---------- | ------------ |
-| PID        | 0x06                      | Register device name/ID                        |           | ✓           |          | ✓          |              |
-| CMD        | 0x01                      | Register command                               |           | ✓           |          | ✓          | ✓            |
-| NIO        | 0x02                      | Add numeric input or output registration       |           | ✓           |          | ✓          | ✓            |
-| ACT        | 0x03                      | End synchronisation state / begin active state |           | ✓           |          | ✓          |              |
-| TNI        | 0x05                      | Toggle numeric input activity                  |           | ✓           |          | ✓          | ✓            |
-| EXC0/1/2   | 0x0C / 0x0D / 0x0E        | Execute command                                |           | ✓           |          |            | ✓            |
-| DBG        | 0x04                      | Debug messaging                                |           | ✓           | ✓        | ✓          | ✓            |
-| VAL1/2/3/4 | 0x08 / 0x09 / 0x0A / 0x0B | Key/value updates                              | ✓         | ✓           |          |            | ✓            |
-| END        | 0x07                      | Return to handshake stage                      | ✓         | ✓           |          | ✓          | ✓            |
+| Command       | Hex                                       |                                                | Host send | Device send | HS state | SYNC state | Active state |
+| ------------- | ----------------------------------------- | ---------------------------------------------- | --------- | ----------- | -------- | ---------- | ------------ |
+| CL_CMD        | 0x01                                      | Register command                               |           | ✓           |          | ✓          | ✓            |
+| CL_NIO        | 0x02 / 0x12 / 0x22 / 0x42 / 0x52 / 0x62 / | Add numeric input or output registration       |           | ✓           |          | ✓          | ✓            |
+| CL_ACT        | 0x03                                      | End synchronisation state / begin active state |           | ✓           |          | ✓          |              |
+| DBG           | 0x04                                      | Debug messaging                                |           | ✓           | ✓        | ✓          | ✓            |
+| CL_TNI        | 0x05 / 0x15                               | Toggle numeric input activity                  |           | ✓           |          | ✓          | ✓            |
+| CL_PID        | 0x06                                      | Register device name/ID                        |           | ✓           |          | ✓          |              |
+| CL_EXC0/1/2   | 0x0C / 0x0D / 0x0E                        | Execute command                                |           | ✓           |          |            | ✓            |
+| CL_VAL1/2/3/4 | 0x08 / 0x09 / 0x0A / 0x0B                 | Key/value updates                              |           | ✓           |          |            | ✓            |
+| SV_VAL1/2/3/4 | 0x01 / 0x02 / 0x03 / 0x04                 | Key/value updates                              | ✓         |             |          |            | ✓            |
 # Transmission formats
 
-TODO: Binary / ASCII 
+TODO: Binary / ASCII description
 
 # Implementations
 
-TODO
+TODO: How to use / configure
 
 - serial_device_arduino
 - serial_host_cpp
 
 # Protocol in-depth
 
-TODO
+TODO - details
