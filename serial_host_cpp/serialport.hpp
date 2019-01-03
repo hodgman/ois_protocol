@@ -15,6 +15,7 @@ public:
 	void SetBaud(int, bool purge=true);
 	int  GetBaud() const { return m_baud; }
 
+	void PurgeReadBuffer();
 	int  Read(char* buffer, int size);
 	bool Write(const char* buffer, int size);
 private:
@@ -265,6 +266,11 @@ void SerialPort::Disconnect()
 	}
 }
 
+void SerialPort::PurgeReadBuffer()
+{
+	if( m_handle != INVALID_HANDLE_VALUE )
+		PurgeComm(m_handle, PURGE_RXCLEAR);
+}
 int SerialPort::Read(char* buffer, int bufferSize)
 {
 	if( m_handle == INVALID_HANDLE_VALUE || bufferSize <= 0 )

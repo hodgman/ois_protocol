@@ -3,7 +3,7 @@
 #endif
 
 #ifndef OIS_BINARY
-#define OIS_BINARY 0
+#define OIS_BINARY 1
 #endif
 
 #ifndef OIS_ASCII
@@ -33,6 +33,10 @@
 
 #if OIS_MIN_VERSION > OIS_MAX_VERSION
 #error "Min can't be above max..."
+#endif
+
+#ifndef OIS_MAX_COMMAND_LENGTH
+#define OIS_MAX_COMMAND_LENGTH 128
 #endif
 
 //todo - toggle numeric input support
@@ -84,11 +88,45 @@ void ois_set(OisState&, OisNumericOutput& output, int value);
 void ois_execute(OisState&, OisCommand& command);
 void ois_print(OisState&, const char*);
 
+class OisProfiler
+{
+public:
+  void loop(OisState& ois)
+  {
+    unsigned long us = micros();
+    unsigned long ms = millis();
+    unsigned long profileDt = profileMs ? ms - prevMs : us - prevUs;
+    unsigned long profileTime = profileMs ? ms : us;
+    prevMs = ms;
+    prevUs = us;
+  
+    perfCount += profileDt;
+    if( profileTime - prevReportTime > (profileMs?30000:30000000) )
+    {
+      unsigned long reportLength = profileTime - prevReportTime;
+      prevReportTime = profileMs ? ms : us;
+      profileDt = (perfCount + (reportLength>>1)) / reportLength;
+      perfCount = 0;
+  
+      char buf[32] = "Loop Rate: ";
+      ltoa( profileDt, buf+11, 10 );
+      strcat(buf+11, profileMs?"ms":"us");
+      ois_print( ois, buf );
+      
+      if( profileMs && profileDt <= 1 )
+        profileMs = false;
+      else if( !profileMs && profileDt > 2000 )
+        profileMs = true;
+    }
+  }
+private:
+  unsigned long perfCount = 0;
+  unsigned long prevReportTime = 0;
+  unsigned long prevUs = 0;
+  unsigned long prevMs = 0;
+  bool profileMs = true;
+};
 
-
-#ifndef OIS_MAX_COMMAND_LENGTH
-#define OIS_MAX_COMMAND_LENGTH 128
-#endif
 
 #define OIS_BUFFER_LENGTH (OIS_MAX_COMMAND_LENGTH*2)
 #define FOURCC(str)                                                            \
@@ -175,6 +213,7 @@ struct OisState
     SV_VAL_2 = 0x02,
     SV_VAL_3 = 0x03,
     SV_VAL_4 = 0x04,
+    SV_END_ = 'E',//0x45
 
     SV_COMMAND_MASK  = 0x07,
     SV_PAYLOAD_SHIFT = 3,
@@ -400,12 +439,69 @@ void ois_parse_ascii(OisState& ois, char* cmd)
 
 int ois_parse_binary(OisState& ois, char* start, char* end)
 {
-  //todo
-  /*
-    SV_VAL_1 = 0x01,
-    SV_VAL_2 = 0x02,
-    SV_VAL_3 = 0x03,
-    SV_VAL_4 = 0x04,*/
+ if( end <= start )
+    return 0;
+  int bufferLength = (int)(ptrdiff_t)(end - start);
+  
+  uint16_t payload = (*start);
+  uint16_t command = payload & OisState::SV_COMMAND_MASK;
+  int cmdLength = 1;
+  if( payload == OisState::SV_END_ )//the host send the END command as ASCII
+  {
+    cmdLength = 4;
+  }
+  else switch( command )
+  {
+  default:
+  case OisState::SV_NUL:
+  {
+#ifdef DEBUG
+    char buffer[32];
+    sprintf(buffer, "Err: Unknown command 0x%02hhX", start[0]);
+    ois_print(ois, buffer);
+#endif
+    return 1;
+  }
+  case OisState::SV_VAL_1: cmdLength = 2; break;
+  case OisState::SV_VAL_2: cmdLength = 3; break;
+  case OisState::SV_VAL_3: cmdLength = 4; break;
+  case OisState::SV_VAL_4: cmdLength = 5; break;
+  }
+  if( bufferLength < cmdLength )
+    return 0;//need ro read more data before we can continue
+  if( payload == OisState::SV_END_ && 0==strcmp(start, "END") )
+    return -1;//need to switch back to ASCII mode
+    
+  int channel = ois.numInputs;
+  int value = 0;
+  uint16_t extra = payload >> OisState::SV_PAYLOAD_SHIFT;
+  switch( command )
+  {
+  case OisState::SV_VAL_1: value = extra;                              channel = *(uint8_t *)(start+1);              break;
+  case OisState::SV_VAL_2: value = *(uint8_t *)(start+1)|(extra << 8); channel = *(uint8_t *)(start+2);              break;
+  case OisState::SV_VAL_3: value = *(uint16_t*)(start+1);              channel = *(uint8_t *)(start+3)|(extra << 8); break;
+  case OisState::SV_VAL_4: value = *(uint16_t*)(start+1);              channel = *(uint16_t*)(start+3);              break;
+  }
+  if( channel < ois.numInputs )
+  {
+    OisNumericInput& v = ois.inputs[channel];
+    v.value = value;
+  }
+#ifdef DEBUG
+  else
+  {
+    char buffer[128];
+    switch( command )
+    {
+    case OisState::SV_VAL_1: sprintf(buffer, "Err: SV_VAL_1 %d=%d (%02hhX%02hhX)", channel, value, start[0], start[1]); break;
+    case OisState::SV_VAL_2: sprintf(buffer, "Err: SV_VAL_2 %d=%d (%02hhX%02hhX%02hhX)", channel, value, start[0], start[1], start[2]); break;
+    case OisState::SV_VAL_3: sprintf(buffer, "Err: SV_VAL_3 %d=%d (%02hhX%02hhX%02hhX%02hhX)", channel, value, start[0], start[1], start[2], start[3]); break;
+    case OisState::SV_VAL_4: sprintf(buffer, "Err: SV_VAL_4 %d=%d (%02hhX%02hhX%02hhX%02hhX%02hhX)", channel, value, start[0], start[1], start[2], start[3], start[4]); break;
+    }
+    ois_print(ois, buffer);
+  }
+#endif
+  return cmdLength;
 }
 
 void ois_recv(OisState& ois)
@@ -421,8 +517,11 @@ void ois_recv(OisState& ois)
   }
   else//shouldn't happen!!!
   {
-    ois_print(ois, "ERROR: Command buffer full!");
+#ifdef DEBUG
+    ois_print(ois, "ERROR: Command buffer full. Buffer blocked?!");
+#endif
     ois.messageLength = 0;
+    Serial.print("END\n");
   }
 
   char* start = ois.messageBuffer;
@@ -438,6 +537,7 @@ void ois_recv(OisState& ois)
         break;
       if( commandLength < 0 )//not a binary command!
       {
+        ois_print(ois, "Received ASCII, resetting...");
         ois.version = ois.maxVersion;
         ois_reset(ois);
         return;
@@ -460,8 +560,11 @@ void ois_recv(OisState& ois)
   
   if( start == ois.messageBuffer && end == ois.messageBuffer+OIS_BUFFER_LENGTH )
   {//filled up the buffer without getting a newline!? probably garbage???
+#ifdef DEBUG
+    ois_print(ois, "ERROR: Command buffer full / no commands processed?!");
+#endif
     ois.messageLength = 0;
-    ois_print(ois, "ERROR: Command buffer full!");
+    Serial.print("END\n");
   }
   else
   {
@@ -482,7 +585,7 @@ void ois_send_handshake(OisState& ois)
     ois.synCount = 0;
   }*/
 #if OIS_MIN_VERSION == 0
-  Serial.print("541\n");//hack for objects in space beta
+  Serial.print("451\n");//hack for objects in space beta
 #endif
 
   Serial.print("SYN=");
@@ -663,6 +766,7 @@ void ois_send_command(OisState& ois, int index)
 void ois_send_output(OisState& ois, int index)
 {
   int base = ois.numCommands + ois.numInputs;
+  int channel = index + base;
   int value = ois.outputs[index].value;
   IF_BINARY
   {
@@ -673,25 +777,25 @@ void ois_send_output(OisState& ois, int index)
     const unsigned valueLimit1   = 1U<<extraBits;
     const unsigned valueLimit2   = 1U<<(8+extraBits);
     const unsigned channelLimit3 = 1U<<(8+extraBits);
-    if( index < 256 && u < valueLimit1 )
+    if( channel < 256 && u < valueLimit1 )
     {
       data[0] = (uint8_t)(OisState::CL_VAL_1 | (u << OisState::CL_PAYLOAD_SHIFT));
-      data[1] = (uint8_t)(index);
+      data[1] = (uint8_t)(channel);
       length = 2;
     }
-    else if( index < 256 && u < valueLimit2 )
+    else if( channel < 256 && u < valueLimit2 )
     {
       data[0] = (uint8_t)(OisState::CL_VAL_2 | ((u>>8) << OisState::CL_PAYLOAD_SHIFT));
       data[1] = (uint8_t)(u);
-      data[2] = (uint8_t)(index);
+      data[2] = (uint8_t)(channel);
       length = 3;
     }
-    else if( index < channelLimit3 )
+    else if( channel < channelLimit3 )
     {
-      data[0] = (uint8_t)(OisState::CL_VAL_3 | ((index>>8) << OisState::CL_PAYLOAD_SHIFT));
+      data[0] = (uint8_t)(OisState::CL_VAL_3 | ((channel>>8) << OisState::CL_PAYLOAD_SHIFT));
       data[1] = (uint8_t)(u);
       data[2] = (uint8_t)(u>>8);
-      data[3] = (uint8_t)(index);
+      data[3] = (uint8_t)(channel);
       length = 4;
     }
     else
@@ -699,15 +803,15 @@ void ois_send_output(OisState& ois, int index)
       data[0] = (uint8_t)OisState::CL_VAL_4;
       data[1] = (uint8_t)(u);
       data[2] = (uint8_t)(u>>8);
-      data[3] = (uint8_t)(index);
-      data[4] = (uint8_t)(index>>8);
+      data[3] = (uint8_t)(channel);
+      data[4] = (uint8_t)(channel>>8);
       length = 5;
     }
     Serial.write(data, length);
   }
   IF_ASCII
   {
-    Serial.print(index + base);
+    Serial.print(channel);
     Serial.print("=");
     Serial.print(value);
     Serial.print("\n");

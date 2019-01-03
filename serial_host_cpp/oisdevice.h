@@ -188,8 +188,8 @@ private:
 		CL_NIO   = 0x02,
 		CL_ACT   = 0x03,
 		CL_SYN_  = 'S',//0x53
-		CL_451_  = '4',//0x34
 		CL_DBG   = 0x04,
+		CL_451_  = '4',//0x34
 		CL_TNI   = 0x05,
 		CL_PID   = 0x06,
 		CL_END   = 0x07,
@@ -217,6 +217,7 @@ private:
 		SV_VAL_2 = 0x02,
 		SV_VAL_3 = 0x03,
 		SV_VAL_4 = 0x04,
+		SV_END_ = 'E',//0x45
 
 		SV_COMMAND_MASK  = 0x07,
 		SV_PAYLOAD_SHIFT = 3,
@@ -325,8 +326,10 @@ void OisDevice::Poll(OIS_STRING_BUILDER& sb)
 
 		if( start == m_commandBuffer && end == m_commandBuffer+OIS_ARRAYSIZE(m_commandBuffer) )
 		{
-			OIS_WARN("OisDevice command buffer is full without a valid command present! Discarding...");
-			m_commandLength = 0;
+			OIS_WARN("OisDevice command buffer is full without a valid command present! Ending...");
+			OIS_INFO( "-> END" );
+			SendText("END\n");
+			ClearState();
 		}
 		else
 		{
@@ -341,19 +344,19 @@ void OisDevice::Poll(OIS_STRING_BUILDER& sb)
 		int16_t data = 0;
 		switch( v.type )
 		{
-			default: OIS_ASSERT( false );
-			case Boolean:
-				data = v.value.boolean ? 1 : 0;
-				OIS_INFO( "-> %d(%s) = %s", v.channel, v.name.c_str(), v.value.boolean ? "true" : "false" );
-				break;
-			case Number:
-				data = (int16_t)Clamp(v.value.number, -32768, 32767);
-				OIS_INFO( "-> %d(%s) = %d", v.channel, v.name.c_str(), v.value.number );
-				break;
-			case Fraction:
-				data = (int16_t)Clamp((int)(v.value.fraction*100.0f), -32768, 32767);
-				OIS_INFO( "-> %d(%s) = %.2f", v.channel, v.name.c_str(), v.value.fraction );
-				break;
+		default: OIS_ASSERT( false );
+		case Boolean:
+			data = v.value.boolean ? 1 : 0;
+			OIS_INFO( "-> %d(%s) = %s", v.channel, v.name.c_str(), v.value.boolean ? "true" : "false" );
+			break;
+		case Number:
+			data = (int16_t)Clamp(v.value.number, -32768, 32767);
+			OIS_INFO( "-> %d(%s) = %d", v.channel, v.name.c_str(), v.value.number );
+			break;
+		case Fraction:
+			data = (int16_t)Clamp((int)(v.value.fraction*100.0f), -32768, 32767);
+			OIS_INFO( "-> %d(%s) = %.2f", v.channel, v.name.c_str(), v.value.fraction );
+			break;
 		}
 		if( m_binary )
 		{
@@ -427,7 +430,7 @@ static int CmdStrLength(const char* c, const char* end, char terminator)
 
 int OisDevice::ProcessBinary(char* start, char* end)
 {
-	if( end <= start+1 )
+	if( end <= start )
 		return 0;
 
 	int bufferLength = (int)(end - start);
@@ -562,7 +565,7 @@ int OisDevice::ProcessBinary(char* start, char* end)
 		}
 		case CL_DBG:
 		{
-			OIS_INFO( "<- DBG: %s", payload);
+			OIS_INFO( "<- DBG: %s", startString);
 			break;
 		}
 		case CL_EXC_0:
@@ -622,6 +625,7 @@ int OisDevice::ProcessBinary(char* start, char* end)
 			}
 			else
 				OIS_WARN( "Received key/value message for unregistered channel %d", channel);
+			break;
 		}
 		case CL_END:
 		{
@@ -684,6 +688,7 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 			{
 				if( !ExpectState(1<<Handshaking, cmd, 1) )
 					ClearState();
+				m_port.PurgeReadBuffer();
 				char* mode = ZeroDelimiter(payload, ',');
 				bool binary = *mode == 'B';
 				int version = atoi(payload);
