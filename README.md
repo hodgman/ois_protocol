@@ -35,7 +35,7 @@ This library is a work in progress. Contributors welcome!
 
 - [ ] Documentation! (including this file)
 - [ ] compatibility with their "v1" spec:
-  - [ ] Test the Arduino device code against Objects In Space game.
+  - [x] Test the Arduino device code against Objects In Space game.
   - [ ] Test the C++ host code against other arduino libraries (e.g. Arduinos In Space).
 - [ ] Collaborate with the community to nail down an ideal "v2" spec.
   - [ ] Extra data type support -- strings, 32bit int + real float?
@@ -162,12 +162,12 @@ For example, a DBG message header is a single byte, followed by a string. A DBG 
 
 | Command    | Type  | Extra                                                        | Following bytes                                              |
 | ---------- | ----- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| `CL_CMD`   | 0x1   | Must be 0                                                    | Byte 1: Low byte of channel ID<br />Byte 2: High byte of channel ID<br />Byte 3+: String event name |
-| `CL_NIO`   | 0x2   | Bitmask of:<br />0x1: Number (N\*N)<br />0x2: Fraction (N\*F)<br />0x4: Output (NO\*) | Byte 1: Low byte of channel ID<br />Byte 2: High byte of channel ID<br />Byte 3+: String input/output name |
+| `CL_CMD`   | 0x1   | Must be 0                                                    | Byte 1: Low byte of channel ID<br />Byte 2: High byte of channel ID<br />Byte 3+: String event name (\0 terminated) |
+| `CL_NIO`   | 0x2   | Bitmask of:<br />0x1: Number (N\*N)<br />0x2: Fraction (N\*F)<br />0x4: Output (NO\*) | Byte 1: Low byte of channel ID<br />Byte 2: High byte of channel ID<br />Byte 3+: String input/output name (\0 terminated) |
 | `CL_ACT`   | 0x3   | Must be 0                                                    | None                                                         |
-| `CL_DBG`   | 0x4   | Must be 0                                                    | Byte 1+: String debug message                                |
+| `CL_DBG`   | 0x4   | Must be 0                                                    | Byte 1+: String debug message (\0 terminated)                |
 | `CL_TNI`   | 0x5   | 0x0: False / deactivate<br />0x1: True / activate            | Byte 1: Low byte of hannel ID<br />Byte 2: High byte of channel ID |
-| `CL_PID`   | 0x6   | Must be 0                                                    | Bytes [1-4]: Product ID (32bit little endian)<br />Bytes [5-8]: Vendor ID (32bit little endian)<br />Byte 9+: Device name |
+| `CL_PID`   | 0x6   | Must be 0                                                    | Bytes [1-4]: Product ID (32bit little endian)<br />Bytes [5-8]: Vendor ID (32bit little endian)<br />Byte 9+: Device name (\0 terminated) |
 | `CL_EXC_0` | 0xC   | Channel ID <br />(low 4 bits)                                | None                                                         |
 | `CL_EXC_1` | 0xD   | High byte of the channel ID <br />(low 4 bits)               | Byte 1: Low byte of hannel ID                                |
 | `CL_EXC_2` | 0xE   | Must be 0                                                    | Byte 1: Low byte of hannel ID<br />Byte 2: High byte of channel ID |
@@ -180,7 +180,7 @@ For example, a DBG message header is a single byte, followed by a string. A DBG 
 
 ##### ASCII Conflicts
 
-The valid ASCII commands conflict with some binary `type` values, and must be differentiated by looking at the entire Byte 0 value:
+The valid ASCII commands may conflict with some binary `type` values, and must be differentiated by looking at the entire Byte 0 value:
 
 | Type | Binary command | Byte 0      | ASCII command | Byte 0 |
 | ---- | -------------- | ----------- | ------------- | ------ |

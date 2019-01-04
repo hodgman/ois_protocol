@@ -1,7 +1,7 @@
 //#define USB_JOYSTICK
 #define DEBUG
 
-#define OIS_BINARY 1
+#define OIS_BINARY 0
 #define OIS_ASCII 1
 #define OIS_MIN_VERSION 0
 #define OIS_MAX_VERSION 2

@@ -370,6 +370,13 @@ void ois_parse_ascii(OisState& ois, char* cmd)
     type = FOURCC(cmd);
 #if OIS_ASCII
   bool isKeyVal = 0!=isDigit(cmd[0]);
+#if OIS_MIN_VERSION == 0
+  if( cmd[0] == '4' && cmd[1] == '5' && cmd[2] == '2' )
+  {
+    type = FOURCC("452\r");
+    isKeyVal = false;
+  }
+#endif
   if( isKeyVal )
   {
     const char* payload = ZeroDelimiter(cmd, '=');
@@ -520,7 +527,8 @@ void ois_recv(OisState& ois)
     ois_print(ois, "ERROR: Command buffer full. Buffer blocked?!");
 #endif
     ois.messageLength = 0;
-    Serial.print("END\n");
+    if( ois.version > 1 )
+      Serial.print("END\n");
   }
 
   char* start = ois.messageBuffer;
@@ -563,7 +571,8 @@ void ois_recv(OisState& ois)
     ois_print(ois, "ERROR: Command buffer full / no commands processed?!");
 #endif
     ois.messageLength = 0;
-    Serial.print("END\n");
+    if( ois.version > 1 )
+      Serial.print("END\n");
   }
   else
   {
@@ -587,6 +596,7 @@ void ois_send_handshake(OisState& ois)
   Serial.print("451\n");//hack for objects in space beta
 #endif
 
+#if OIS_MAX_VERSION > 0
   Serial.print("SYN=");
   Serial.print(ois.version);
 #if OIS_MAX_VERSION > 1
@@ -600,8 +610,9 @@ void ois_send_handshake(OisState& ois)
   }
 #endif
   Serial.print("\n");
+#endif
 
-  delay(500);
+  delay(1000);
 }
 
 
