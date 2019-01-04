@@ -374,9 +374,10 @@ void ois_parse_ascii(OisState& ois, char* cmd)
   {
     const char* payload = ZeroDelimiter(cmd, '=');
     int channel = atoi(cmd);
-    if( channel < ois.numInputs )
+    int index = channel - ois.numCommands;
+    if( index >= 0 && index < ois.numInputs )
     {
-      OisNumericInput& v = ois.inputs[channel];
+      OisNumericInput& v = ois.inputs[index];
       v.value = atoi(payload);
     }
   }
@@ -478,9 +479,11 @@ int ois_parse_binary(OisState& ois, char* start, char* end)
   case OisState::SV_VAL_3: value = *(uint16_t*)(start+1);              channel = *(uint8_t *)(start+3)|(extra << 8); break;
   case OisState::SV_VAL_4: value = *(uint16_t*)(start+1);              channel = *(uint16_t*)(start+3);              break;
   }
-  if( channel < ois.numInputs )
+  
+  int index = channel - ois.numCommands;
+  if( index >= 0 && index < ois.numInputs )
   {
-    OisNumericInput& v = ois.inputs[channel];
+    OisNumericInput& v = ois.inputs[index];
     v.value = value;
   }
 #ifdef DEBUG

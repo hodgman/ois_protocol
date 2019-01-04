@@ -211,6 +211,7 @@ private:
 		CL_SYN_  = 'S',//0x53
 		CL_DBG   = 0x04,
 		CL_451_  = '4',//0x34
+		CL_END_  = 'E',//0x45
 		CL_TNI   = 0x05,
 		CL_PID   = 0x06,
 		CL_END   = 0x07,
