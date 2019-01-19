@@ -40,8 +40,14 @@ This library is a work in progress. Contributors welcome!
 - [ ] Collaborate with the community to nail down an ideal "v2" spec.
   - [ ] Extra data type support -- strings, 32bit int + real float?
   - [ ] More testing of the binary communication mode.
-- [ ] Example implementations in other languages (C#?).
-- [ ] Other transport mechanisms besides serial ports (Websockets, HTTP, TCP Sockets, Pipes, Shared Memory?).
+- [ ] Example implementations in other languages
+  - [x] C++
+  - [ ] C#
+  - [x] Javascript
+- [ ] Other transport mechanisms besides serial ports
+  - [x] Websocket client
+  - [ ] Websocket server
+  - [ ] HTTP, pipes, shared memory?
 - [ ] Port to platforms other than Windows.
 - [ ] Game Engine examples (Unity, Unreal?).
 - [x] Add an example host application that translates the OIS device into a virtual Direct Input device using vJoy (allow OIS devices to work on non-OIS-compatible games)

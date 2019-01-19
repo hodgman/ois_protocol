@@ -1,0 +1,40 @@
+<!DOCTYPE HTML>
+
+<html>
+   <head>
+      <script src="jquery/jquery-3.3.1.min.js"></script>
+      <script src="ois_protocol.js"></script>
+      <script type = "text/javascript">
+var ois = 1;
+function WebSocketTest() 
+{
+	$( "#log" ).append("Test...");
+
+	if ("WebSocket" in window) 
+	{
+		var inputs = {
+			"BTN_LED0" : OisType.Number,
+		};
+		var outputs = {
+			"BTN0" : OisType.Boolean,
+		};
+		var commands = [
+			"Quit"
+		];
+
+		ois = new OisState("ws://localhost:8081/input", "HTML test", MakeFourCC("HTML"), MakeFourCC("TEST"), commands, inputs, outputs);
+	} 
+	else 
+	{
+		alert("WebSocket is not supported by your browser!");
+	}
+}
+      </script>
+		
+   </head>
+   
+   <body>
+      <a href = "javascript:WebSocketTest()">Start test</a>
+	  <div id="log">log</div>
+   </body>
+</html>

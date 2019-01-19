@@ -371,7 +371,7 @@ void ois_parse_ascii(OisState& ois, char* cmd)
 #if OIS_ASCII
   bool isKeyVal = 0!=isDigit(cmd[0]);
 #if OIS_MIN_VERSION == 0
-  if( cmd[0] == '4' && cmd[1] == '5' && cmd[2] == '2' )
+  if( cmd[0] == '4' && cmd[1] == '5' && cmd[2] == '2'  && cmd[3] == '\r' )
   {
     type = FOURCC("452\r");
     isKeyVal = false;
@@ -398,9 +398,7 @@ void ois_parse_ascii(OisState& ois, char* cmd)
         break;
       case FOURCC("DEN\0")://v1
       {
-        if( ois.version == 451 )
-          ois.version = OIS_MAX_VERSION;
-        else if( ois.version > 0 )
+        if( ois.version > 0 )
           ois.version--;
         else
           ois.version = ois.maxVersion;
@@ -424,19 +422,19 @@ void ois_parse_ascii(OisState& ois, char* cmd)
 #if OIS_BINARY
         ois.binary = true;
 #endif
-      }//fall-through:
-#endif
-      case FOURCC("ACK\0")://v1
-        ois.deviceState = OisState::Synchronisation;
-        break;
-#if OIS_MIN_VERSION == 0
-      case FOURCC("452\r")://hack for objects in space beta
-      {
-        ois.version = 1;
         ois.deviceState = OisState::Synchronisation;
         break;
       }
 #endif
+#if OIS_MIN_VERSION == 0
+      case FOURCC("452\r")://hack for objects in space beta
+#endif
+      case FOURCC("ACK\0")://v1
+	  {
+        ois.version = 1;
+        ois.deviceState = OisState::Synchronisation;
+        break;
+	  }
     }
   }
 }

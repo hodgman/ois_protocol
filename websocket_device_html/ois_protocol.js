@@ -1,0 +1,294 @@
+
+function MakeFourCC( cmd )
+{
+	return cmd.charCodeAt(0) | (cmd.charCodeAt(1)<<8) | (cmd.charCodeAt(2)<<16) | (cmd.charCodeAt(3)<<24);
+}
+
+var OisType = Object.freeze({
+	"Boolean":1,
+	"Number":2,
+	"Fraction":3
+});
+var OisDeviceState = Object.freeze({
+	"Handshaking":1,
+	"Synchronisation":2,
+	"Active":3
+});
+var OisCommands = Object.freeze({
+	"DENn":MakeFourCC("DEN\n"),
+	"ACKn":MakeFourCC("ACK\n"),
+	"ACK2":MakeFourCC("ACK="),
+	"ENDn":MakeFourCC("END\n")
+});
+	
+function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version)
+{
+	if (!(this instanceof OisState)) 
+		return new OisState(url, deviceName, pid, vid, commands, inputs, outputs, version);
+		
+		$( "#log" ).append("Hello..."+"<br/>");
+		
+	this.wsOpen = false;
+	this.deviceState = OisDeviceState.Handshaking;
+	this.maxVersion = 2;//version > 0 ? version : 2;
+	this.deviceName = deviceName;
+	this.pid = pid;
+	this.vid = vid;
+	this.commands = commands;
+	this.inputs = inputs;
+	this.outputs = outputs;
+	this.inputIndices = Object.keys(inputs);
+	this.outputIndices = Object.keys(outputs);
+	this.inputValues = {};
+	for(var key in inputs) 
+		this.inputValues[key] = 0;
+	
+	var self = this;
+	
+	function CommandChannelFromIndex(idx)
+	{
+		return idx;
+	};
+	function CommandChannelFromName(name)
+	{
+		return self.commands.indexOf(name);
+	};
+	function InputChannelFromIndex(idx)
+	{
+		return idx >= 0 ? idx + self.commands.length : idx;
+	};
+	function InputChannelFromName(name)
+	{
+		return InputChannelFromIndex( self.inputIndices.indexOf(name) );
+	};
+	function InputIndexFromChannel(channel)
+	{
+		var idx = channel - self.commands.length;
+		return idx >= 0 && idx < self.inputIndices.length ? idx : -1;
+	};
+	function OutputChannelFromIndex(idx)
+	{
+		return idx >= 0 ? idx + self.commands.length + self.inputIndices.length : idx;
+	}
+	function OutputChannelFromName(name)
+	{
+		return OutputChannelFromIndex( self.outputIndices.indexOf(name) );
+	};
+	
+	this.SetOutput = function(name, value)
+	{
+		var index = OutputChannelFromName(name);
+		if( index < 0 )
+			return false;
+		switch( self.outputs[name] )
+		{
+		default:
+			return false;
+		case OisType.Boolean:
+			value = value!=0 ? 1 : 0;
+			break;
+		case OisType.Number:
+			value = min(32767, max(-32768, value));
+			break;
+		case OisType.Fraction:
+			value = min(32767, max(-32768, value*100));
+			break;
+		}
+		self.writeBuffer += index+"="+value+"\n";
+		return true;
+	};
+	this.GetInput = function(name)
+	{
+		return self.inputValues[name];
+	};
+	this.ExecuteCommand = function(name)
+	{
+		var index = CommandChannelFromName(name);
+		if( index < 0 )
+			return false;
+		self.writeBuffer += "EXC="+index+"\n";
+		return true;
+	};
+	
+	
+	function OnPoll()
+	{
+		if( self.ws.readyState != 1 )
+		{
+			if( self.ws.readyState == 3 )
+				Reset();
+			return;
+		}
+		
+		if( self.deviceState == OisDeviceState.Handshaking )
+		{
+			var now = new Date();
+			var timeDiff = now - self.lastHandshakeTime;
+			if( timeDiff > 1000 )
+			{
+				self.lastHandshakeTime = now;
+				self.ws.send("SYN="+self.version+"\n");
+				  $( "#log" ).append("&gt; SYN="+self.version+"\n"+"<br/>");
+			}
+		}
+		else if( self.deviceState == OisDeviceState.Synchronisation )
+		{
+			var buffer = "PID="+self.pid+","+self.vid+","+self.deviceName+"\n";
+			for( var i=0; i!=self.commands.length; ++i )
+			{
+				buffer += "CMD="+self.commands[i]+","+CommandChannelFromIndex(i)+"\n";
+			}
+			for( var i=0; i!=self.inputIndices.length; ++i )
+			{
+				var name = self.inputIndices[i];
+				switch( self.inputs[name] )
+				{
+				case OisType.Boolean:  buffer += "NIB="+name+","+InputChannelFromIndex(i)+"\n"; break;
+				case OisType.Number:   buffer += "NIN="+name+","+InputChannelFromIndex(i)+"\n"; break;
+				case OisType.Fraction: buffer += "NIF="+name+","+InputChannelFromIndex(i)+"\n"; break;
+				}
+			}
+			if( self.version >= 2 )
+			{
+				for( var i=0; i!=self.outputIndices.length; ++i )
+				{
+					var name = self.outputIndices[i];
+					switch( self.outputs[name] )
+					{
+					case OisType.Boolean:  buffer += "NOB="+name+","+OutputChannelFromIndex(i)+"\n"; break;
+					case OisType.Number:   buffer += "NON="+name+","+OutputChannelFromIndex(i)+"\n"; break;
+					case OisType.Fraction: buffer += "NOF="+name+","+OutputChannelFromIndex(i)+"\n"; break;
+					}
+				}
+			}
+			buffer += "ACT\n";
+				  $( "#log" ).append("&gt; " + buffer+"<br/>");
+			self.ws.send(buffer);
+			self.deviceState = OisDeviceState.Active;
+		}
+		else if( self.writeBuffer.length )
+		{
+				  $( "#log" ).append("&gt; " + self.writeBuffer+"<br/>");
+				  
+			self.ws.send(self.writeBuffer);
+			self.writeBuffer = "";
+		}
+	};
+	function ProcessCommand()
+	{
+		if( self.commandBuffer.length < 4 )
+			return;
+		var newlineIdx = self.commandBuffer.indexOf('\n');
+		if( newlineIdx < 0 )
+			return;
+		var cmd = self.commandBuffer.substring(0, newlineIdx);
+		self.commandBuffer = self.commandBuffer.substring(newlineIdx+1);
+		
+				  $( "#log" ).append("&lt; " + cmd+"<br/>");
+		
+		var fourcc = cmd.charCodeAt(0) | (cmd.charCodeAt(1)<<8) | (cmd.charCodeAt(2)<<16) | (cmd.charCodeAt(3)<<24);
+		switch( fourcc )
+		{
+		case OisCommands.DENn:
+		{
+			if( self.version > 0 )
+				self.version--;
+			else
+				self.version = self.maxVersion;
+			break;
+		}
+		case OisCommands.ENDn:
+		{
+			Reset();
+			break;
+		}
+		case OisCommands.ACK2:
+		{
+			var commaIdx = cmd.indexOf(',');
+			if( commaIdx >= 0 )
+			{
+				self.gameTitle = cmd.substr(commaIdx+1);
+				cmd = cmd.substr(0,commaIdx);
+			}
+			self.gameVersion = parseInt(cmd);
+			self.deviceState = OisDeviceState.Synchronisation;
+			break;
+		}
+		case OisCommands.ACKn:
+		{
+			self.version = 1;
+			self.deviceState = OisDeviceState.Synchronisation;
+			break;
+		}
+		default:
+			var eqIdx = str.indexOf('=');
+			if( eqIdx >= 0 )
+			{
+				var value   = parseInt(cmd.substr(eqIdx+1));
+				var channel = parseInt(cmd.substr(0,eqIdx));
+				var idxInput = InputIndexFromChannel(channel);
+				if( idxInput >= 0 )
+				{
+					var name = inputIndices[idxInput];
+					switch( self.inputs[name] )
+					{
+					default:
+						return false;
+					case OisType.Boolean:
+						inputValues[name] = value!=0 ? true : false;
+						break;
+					case OisType.Number:
+						inputValues[name] = value;
+						break;
+					case OisType.Fraction:
+						inputValues[name] = value / 100.0;
+						break;
+					}
+				}
+			}
+		}
+		
+		ProcessCommand();
+	}
+	function OnMessage( message )
+	{
+		self.commandBuffer += message;
+		ProcessCommand();
+	};
+	
+	var wsReader = new FileReader();
+	wsReader.onload = function(event)
+	{
+		OnMessage(wsReader.result);
+	};
+	
+	function Reset()
+	{
+		self.binary = false;
+		self.commandBuffer = "";
+		self.writeBuffer = "";
+		self.gameTitle = "";
+		self.gameVersion = 0;
+		self.version = self.maxVersion;
+		self.lastHandshakeTime = new Date();
+		self.ws = new WebSocket(url);
+		self.ws.onopen = function() 
+		{
+			self.wsOpen = true;
+		};
+		self.ws.onclose = function()
+		{ 
+			self.wsOpen = false;
+		};
+		self.ws.onerror = self.ws.onclose;
+		self.ws.onmessage = function(evt) 
+		{ 
+			wsReader.readAsText(evt.data);
+		};
+	};
+	Reset();
+	
+	setInterval(function() {
+		OnPoll();
+	}, 100);
+}
