@@ -1,3 +1,5 @@
+#ifndef OIS_SERIALPORT_INCLUDED
+#define OIS_SERIALPORT_INCLUDED
 
 class SerialPort
 {
@@ -9,8 +11,10 @@ public:
 	static void EnumerateSerialPorts(OIS_PORT_LIST& results, OIS_STRING_BUILDER&, int minPort=-1);
 	
 	bool IsConnected();
+	void Connect();
 	void Connect(const char* portName);
 	void Disconnect();
+	const OIS_STRING& PortName() const { return m_portName; }
 
 	void SetBaud(int, bool purge=true);
 	int  GetBaud() const { return m_baud; }
@@ -24,6 +28,7 @@ private:
 
 	void* m_handle;
 	int m_baud = 0;
+	OIS_STRING m_portName;
 };
 
 
@@ -180,6 +185,13 @@ SerialPort::SerialPort()
 
 void SerialPort::Connect(const char* portName)
 {
+	m_portName = portName;
+	Connect();
+}
+
+void SerialPort::Connect()
+{
+	const char* portName = m_portName.c_str();
 	Disconnect();
 	m_handle = CreateFileA(portName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if( m_handle != INVALID_HANDLE_VALUE )
@@ -313,3 +325,5 @@ bool SerialPort::Write(const char* buffer, int bufferSize)
 #error Requires porting to this platform...
 #endif
 #endif//OIS_SERIALPORT_IMPL
+#endif // OIS_SERIALPORT_INCLUDED
+

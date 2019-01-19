@@ -1,4 +1,6 @@
-﻿
+﻿#ifndef OIS_DEVICE_INCLUDED
+#define OIS_DEVICE_INCLUDED
+
 #ifndef OIS_INFO
 #define OIS_INFO( fmt, ... ) do{}while(0)
 #endif
@@ -102,8 +104,12 @@ struct PortName
 typedef OIS_VECTOR<PortName> OIS_PORT_LIST;
 
 #ifndef OIS_PORT
-#define OIS_PORT SerialPort
-#include "serialport.hpp"
+# include "serialport.hpp"
+# ifdef OIS_VIRTUAL_PORT
+#  define OIS_PORT IOisPort
+# else
+#  define OIS_PORT SerialPort
+# endif
 #endif
 
 #ifndef OIS_FOURCC
@@ -116,13 +122,58 @@ typedef OIS_VECTOR<PortName> OIS_PORT_LIST;
 const static unsigned OIS_MAX_COMMAND_LENGTH = 128;
 #endif
 
+#ifdef OIS_VIRTUAL_PORT
+class IOisPort
+{
+public:
+	virtual ~IOisPort() {}
+	virtual bool IsConnected() = 0;
+	virtual void Connect() = 0;
+	virtual void Disconnect() = 0;
+	virtual int  Read(char* buffer, int size) = 0;
+	virtual bool Write(const char* buffer, int size) = 0;
+};
+
+#ifdef OIS_SERIALPORT_INCLUDED
+class OisPortSerial : public IOisPort
+{
+public:
+	OisPortSerial(const char* portName)
+		: m_port(portName)
+	{}
+	bool IsConnected()
+	{
+		return m_port.IsConnected();
+	}
+	void Connect()
+	{
+		m_port.Connect();
+	}
+	void Disconnect()
+	{
+		m_port.Disconnect();
+	}
+	int Read(char* buffer, int size)
+	{
+		return m_port.Read(buffer, size);
+	}
+	bool Write(const char* buffer, int size)
+	{
+		return m_port.Write(buffer, size);
+	}
+	const OIS_STRING& PortName() const { return m_port.PortName(); }
+private:
+	SerialPort m_port;
+};
+#endif
+#endif
+
 class OisDevice
 {
 public:
-	OisDevice(unsigned id, const OIS_STRING& path, const OIS_STRING& name, unsigned gameVersion, const char* gameName)
-		: m_portName(path)
+	OisDevice(OIS_PORT& port, const OIS_STRING& name, unsigned gameVersion, const char* gameName)
+		: m_port(port)
 		, m_deviceName(name)
-		, m_portId(id)
 		, m_gameVersion(gameVersion)
 		, m_gameName(gameName)
 	{
@@ -131,7 +182,6 @@ public:
 	const char* GetDeviceName() const { return m_deviceNameOverride.empty() ? m_deviceName.c_str() : m_deviceNameOverride.c_str(); }
 	uint32_t    GetProductID()  const { return m_pid; }
 	uint32_t    GetVendorID()   const { return m_vid; }
-	unsigned    GetPortId()     const { return m_portId; }
 	bool        Connecting()    const { return m_connectionState != Handshaking; }
 	bool        Connected()     const { return m_connectionState == Active; }
 	
@@ -260,8 +310,7 @@ private:
 	bool ProcessAscii(char* cmd, OIS_STRING_BUILDER&);
 	int ProcessBinary(char* start, char* end);
 
-	OIS_PORT m_port;
-	OIS_STRING m_portName;
+	OIS_PORT& m_port;
 	OIS_STRING m_deviceName;
 
 	unsigned m_gameVersion;
@@ -301,7 +350,7 @@ void OisDevice::Poll(OIS_STRING_BUILDER& sb)
 	{
 		if( m_connectionState != Handshaking )
 			ClearState();
-		m_port.Connect(m_portName.c_str());
+		m_port.Connect();
 		return;
 	}
 	for( ;; )
@@ -873,7 +922,9 @@ void OisDevice::ClearState()
 	m_queuedInputs.clear();
 	m_events.clear();
 	m_eventBuffer.clear();
-	if( m_port.IsConnected() )
-		m_port.SetBaud(9600);
+//	if( m_port.IsConnected() )
+//		m_port.SetBaud(9600);
 }
-#endif
+#endif // OIS_DEVICE_IMPL
+
+#endif // OIS_DEVICE_INCLUDED

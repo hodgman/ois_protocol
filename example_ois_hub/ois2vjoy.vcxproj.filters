@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="output_vjoy.cpp" />
+    <ClCompile Include="..\websocket_host_cpp\webby\webby.c">
+      <Filter>websocket_host_cpp\webby</Filter>
+    </ClCompile>
+    <ClCompile Include="main_gui.cpp" />
+    <ClCompile Include="input_ois.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="vjoy\vjoyinterface.h">
+      <Filter>vjoy</Filter>
+    </ClInclude>
+    <ClInclude Include="vjoy\public.h">
+      <Filter>vjoy</Filter>
+    </ClInclude>
+    <ClInclude Include="nuklear\nuklear_gdi.h">
+      <Filter>nuklear</Filter>
+    </ClInclude>
+    <ClInclude Include="nuklear\nuklear.h">
+      <Filter>nuklear</Filter>
+    </ClInclude>
+    <ClInclude Include="..\serial_host_cpp\oisdevice.h">
+      <Filter>serial_host_cpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\serial_host_cpp\serialport.hpp">
+      <Filter>serial_host_cpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\websocket_host_cpp\ois_webby.h">
+      <Filter>websocket_host_cpp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\websocket_host_cpp\webby\webby.h">
+      <Filter>websocket_host_cpp\webby</Filter>
+    </ClInclude>
+    <ClInclude Include="..\websocket_host_cpp\webby\webby_unix.h">
+      <Filter>websocket_host_cpp\webby</Filter>
+    </ClInclude>
+    <ClInclude Include="..\websocket_host_cpp\webby\webby_win32.h">
+      <Filter>websocket_host_cpp\webby</Filter>
+    </ClInclude>
+    <ClInclude Include="input_ois.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="vjoy">
+      <UniqueIdentifier>{42017d90-6c3d-4342-9345-52fdfd86a4af}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="nuklear">
+      <UniqueIdentifier>{ef7d7e3e-f5bb-434d-99ad-c6883abc267a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="serial_host_cpp">
+      <UniqueIdentifier>{6143046a-392f-485e-870e-b7840b4060e5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="websocket_host_cpp">
+      <UniqueIdentifier>{e83b7504-f995-4f9e-892b-fa7a651d38d1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="websocket_host_cpp\webby">
+      <UniqueIdentifier>{ca1566f0-4d65-4046-9055-679c6db4db22}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

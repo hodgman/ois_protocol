@@ -21,16 +21,31 @@ var OisCommands = Object.freeze({
 	"ENDn":MakeFourCC("END\n")
 });
 	
-function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version)
+function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version, logElement)
 {
 	if (!(this instanceof OisState)) 
 		return new OisState(url, deviceName, pid, vid, commands, inputs, outputs, version);
-		
-		$( "#log" ).append("Hello..."+"<br/>");
+	
+	var log = function() {};
+	if( logElement )
+	{
+		log = function(out, msg)
+		{
+			if( msg.charAt(msg.length-1) == '\n' )
+				msg = msg.substring(0, msg.length-1);
+			
+			if( out )
+				msg = "&gt; " + msg.replace(/\n/g, "<br/>&gt; ");
+			else
+				msg = "&lt; " + msg.replace(/\n/g, "<br/>&lt; ");
+			
+			logElement.append(msg + "<br/>");
+		};
+	}
 		
 	this.wsOpen = false;
 	this.deviceState = OisDeviceState.Handshaking;
-	this.maxVersion = 2;//version > 0 ? version : 2;
+	this.maxVersion = version > 0 ? version : 2;
 	this.deviceName = deviceName;
 	this.pid = pid;
 	this.vid = vid;
@@ -40,6 +55,7 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version)
 	this.inputIndices = Object.keys(inputs);
 	this.outputIndices = Object.keys(outputs);
 	this.inputValues = {};
+	this.inputCallbacks = {};
 	for(var key in inputs) 
 		this.inputValues[key] = 0;
 	
@@ -101,6 +117,12 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version)
 	{
 		return self.inputValues[name];
 	};
+	this.OnChanged = function(inputName, callback)
+	{
+		if( !(inputName in self.inputCallbacks) ) 
+			self.inputCallbacks[inputName] = [];
+		self.inputCallbacks[inputName].push(callback);
+	};
 	this.ExecuteCommand = function(name)
 	{
 		var index = CommandChannelFromName(name);
@@ -110,6 +132,7 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version)
 		return true;
 	};
 	
+	var Reset;
 	
 	function OnPoll()
 	{
@@ -127,8 +150,9 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version)
 			if( timeDiff > 1000 )
 			{
 				self.lastHandshakeTime = now;
-				self.ws.send("SYN="+self.version+"\n");
-				  $( "#log" ).append("&gt; SYN="+self.version+"\n"+"<br/>");
+				var msg = "SYN="+self.version+"\n";
+				self.ws.send(msg);
+				log(true, msg);
 			}
 		}
 		else if( self.deviceState == OisDeviceState.Synchronisation )
@@ -162,14 +186,13 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version)
 				}
 			}
 			buffer += "ACT\n";
-				  $( "#log" ).append("&gt; " + buffer+"<br/>");
+			log(true, buffer);
 			self.ws.send(buffer);
 			self.deviceState = OisDeviceState.Active;
 		}
 		else if( self.writeBuffer.length )
 		{
-				  $( "#log" ).append("&gt; " + self.writeBuffer+"<br/>");
-				  
+			log(true, self.writeBuffer);
 			self.ws.send(self.writeBuffer);
 			self.writeBuffer = "";
 		}
@@ -184,7 +207,7 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version)
 		var cmd = self.commandBuffer.substring(0, newlineIdx);
 		self.commandBuffer = self.commandBuffer.substring(newlineIdx+1);
 		
-				  $( "#log" ).append("&lt; " + cmd+"<br/>");
+		log(false, cmd);
 		
 		var fourcc = cmd.charCodeAt(0) | (cmd.charCodeAt(1)<<8) | (cmd.charCodeAt(2)<<16) | (cmd.charCodeAt(3)<<24);
 		switch( fourcc )
@@ -221,7 +244,7 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version)
 			break;
 		}
 		default:
-			var eqIdx = str.indexOf('=');
+			var eqIdx = cmd.indexOf('=');
 			if( eqIdx >= 0 )
 			{
 				var value   = parseInt(cmd.substr(eqIdx+1));
@@ -229,20 +252,28 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version)
 				var idxInput = InputIndexFromChannel(channel);
 				if( idxInput >= 0 )
 				{
-					var name = inputIndices[idxInput];
+					var name = self.inputIndices[idxInput];
 					switch( self.inputs[name] )
 					{
 					default:
 						return false;
 					case OisType.Boolean:
-						inputValues[name] = value!=0 ? true : false;
+						self.inputValues[name] = value!=0 ? true : false;
 						break;
 					case OisType.Number:
-						inputValues[name] = value;
+						self.inputValues[name] = value;
 						break;
 					case OisType.Fraction:
-						inputValues[name] = value / 100.0;
+						self.inputValues[name] = value / 100.0;
 						break;
+					}
+					var inputCallbacks = self.inputCallbacks[name];
+					if( inputCallbacks )
+					{
+						for( var i = 0; i < inputCallbacks.length; i++ )
+						{
+							inputCallbacks[i](self.inputValues[name], name);
+						}
 					}
 				}
 			}
@@ -285,6 +316,7 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version)
 		{ 
 			wsReader.readAsText(evt.data);
 		};
+		log(true, "Connecting to "+url);
 	};
 	Reset();
 	

@@ -52,12 +52,12 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>winmm.lib;Msimg32.lib;vJoyInterface.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ws2_32.lib;winmm.lib;Msimg32.lib;vJoyInterface.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -68,23 +68,32 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>winmm.lib;Msimg32.lib;vJoyInterface.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ws2_32.lib;winmm.lib;Msimg32.lib;vJoyInterface.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="vjoy.cpp" />
+    <ClCompile Include="..\websocket_host_cpp\webby\webby.c" />
+    <ClCompile Include="main_gui.cpp" />
+    <ClCompile Include="input_ois.cpp" />
+    <ClCompile Include="output_vjoy.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\serial_host_cpp\oisdevice.h" />
+    <ClInclude Include="..\serial_host_cpp\serialport.hpp" />
+    <ClInclude Include="..\websocket_host_cpp\ois_webby.h" />
+    <ClInclude Include="..\websocket_host_cpp\webby\webby.h" />
+    <ClInclude Include="..\websocket_host_cpp\webby\webby_unix.h" />
+    <ClInclude Include="..\websocket_host_cpp\webby\webby_win32.h" />
     <ClInclude Include="nuklear\nuklear.h" />
     <ClInclude Include="nuklear\nuklear_gdi.h" />
+    <ClInclude Include="input_ois.h" />
     <ClInclude Include="vjoy\public.h" />
     <ClInclude Include="vjoy\vjoyinterface.h" />
   </ItemGroup>

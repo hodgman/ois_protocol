@@ -7,6 +7,8 @@
 #include <time.h>
 #include <limits.h>
 
+#include "input_ois.h"
+
 void RunDemoGui();
 
 bool VJoy_Init(char* out_error, int errorSize);
@@ -37,17 +39,6 @@ int main( int argc, char *argv[] )
 	return 0; 
 }
 
-void OisLog( const char* category, const char* fmt, ... );
-#define OIS_INFO( fmt, ... ) OisLog("INFO", fmt, __VA_ARGS__);
-#define OIS_WARN( fmt, ... ) OisLog("WARN", fmt, __VA_ARGS__);
-#define OIS_ASSERT( condition ) if(!(condition)){OisLog("ASSERTION", "%s(%d) : %s", __FILE__, __LINE__, #condition);}
-#define OIS_ENABLE_ERROR_LOGGING 1
-
-#define OIS_DEVICE_IMPL
-#define OIS_SERIALPORT_IMPL
-#include "../oisdevice.h"
-
-
 #define WINDOW_WIDTH 564*2
 #define WINDOW_HEIGHT 1152
 
@@ -59,33 +50,6 @@ void OisLog( const char* category, const char* fmt, ... );
 #define NK_GDI_IMPLEMENTATION
 #include "nuklear/nuklear.h"
 #include "nuklear/nuklear_gdi.h"
-
-struct
-{
-	OisDevice* device = nullptr;
-	OIS_PORT_LIST portList;
-	bool firstFrame = true;
-	
-	OIS_STRING_BUILDER sb;
-	std::vector<std::string> log;
-
-	std::vector<std::string> eventLog;
-	std::vector<const OisDevice::Event*> eventsThisLoop;
-	
-	float axisValues[8] = {};
-	bool buttonValues[128] = {};
-	int numButtons = 0;
-	int numAxes = 0;
-}g;
-void OisLog(const char* category, const char* fmt, ...)
-{
-	std::string str;
-	va_list	v;
-	va_start(v, fmt);
-	g.sb.FormatV(str, fmt, v);
-	va_end( v );
-	g.log.push_back(str);
-}
 
 void DoLogGui(struct nk_context* ctx)
 {
@@ -125,7 +89,9 @@ void DoConnectingGui(struct nk_context* ctx)
 			if( nk_button_label(ctx, label.c_str()) )
 			{
 				delete g.device;
-				g.device = new OisDevice(it->id, it->path, it->name, 1, "vJoy");
+				delete g.port;
+				g.port = new OisPortSerial(it->path.c_str());
+				g.device = new OisDevice(*g.port, it->name, 1, "vJoy");
 			}
 		}
 	}
@@ -152,7 +118,7 @@ void DoOisGui(struct nk_context* ctx)
 	nk_label(ctx, "VID", NK_TEXT_LEFT);
 	nk_labelf(ctx, NK_TEXT_LEFT, "0x%8X", g.device->GetVendorID());
 	nk_label(ctx, "Port", NK_TEXT_LEFT);
-	nk_labelf(ctx, NK_TEXT_LEFT, "%d", g.device->GetPortId());
+	nk_labelf(ctx, NK_TEXT_LEFT, "%s", g.port->PortName().c_str());
 	nk_label(ctx, "State", NK_TEXT_LEFT);
 	if( g.device->Connected() )
 		nk_label(ctx, "Active", NK_TEXT_LEFT);

@@ -1,0 +1,88 @@
+<!DOCTYPE HTML>
+
+<html>
+   <head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=11" />
+<meta http-equiv="Pragma" content="no-cache">
+      <style>
+html{ overflow:hidden; width:100%; height:100%; }
+body{ font-family:"Lucida Console", Monaco, monospace; background-color:#050608; font-size:12px; color:#fff;}
+#gui { position:absolute; top:10px; left:10px; width:640px; pointer-events:none;}
+      </style>
+      <script src="jquery/jquery-3.3.1.min.js"></script>
+      <script src="uil/uil.min.js"></script>
+      <script src="../ois_protocol.js"></script>
+      <script type="text/javascript">
+var ois = false;
+var led0 = { value: 0 };
+function WebSocketTest() 
+{
+	if( !("WebSocket" in window) ) 
+	{
+		alert("WebSocket is not supported by your browser!");
+		return;
+	}
+	
+	var inputs = {
+		"BTN_LED0" : OisType.Number,
+	};
+	var outputs = {
+		"BTN0" : OisType.Boolean,
+		"AXIS0" : OisType.Fraction,
+	};
+	var commands = [
+		"QUIT"
+	];
+
+	ois = new OisState("ws://localhost:8081/input", "HTML test", MakeFourCC("HTML"), MakeFourCC("TEST"), commands, inputs, outputs, 0, $("#log"));
+	ois.OnChanged("BTN_LED0", function(v){ led0.value = v; });
+}
+      </script>
+		
+   </head>
+   
+   <body>
+   
+	  <div id="debug"></div>
+	  <div id="log"></div>
+	  
+<script type="text/javascript">
+
+var debug = document.getElementById('debug');
+
+var guiCallback = function(v){ debug.innerHTML = v; }
+var ui = new UIL.Gui( { css:'top:84px; left:50%;', w:640, h:20, center:true } ).onChange( guiCallback );
+
+ui.add('title',  { name:'Test GUI'});
+ui.add('string', { name:'Host URL', value:"ws://localhost:8081/input"});
+ui.add('button', { name:'Connect', callback:function(){ WebSocketTest(); } });
+
+var b1 = ui.add('bool',   { name:'bool', h:20, value:false });
+
+var s1 = ui.add('slide',  { name:'slide', min:-100, max:100, value:0, precision:0, h:20 });
+
+
+ui.add('button', { name:'MULTY', fontColor:'#D4B87B', height:30, value:['Button 1', 'Button 2', 'Button 3', 'Button 4'] });
+
+ui.add('button', { name:'Quit', callback:function(){ if( ois ) ois.ExecuteCommand("QUIT"); } });
+
+ui.add('circular', { name:'circular', w:75, min:0, max:100, value:25, precision:0 });
+
+var k1 = ui.add(led0, 'value', { type: 'knob', name:'knob', w:84, min:0, max:1, value:70, precision:2, step:0.1, fontColor:'#D4B87B' });
+k1.listen();
+
+group = ui.add('group', { name:'Joystick', fontColor:'#D4B87B' });
+j1 = group.add('joystick', { name:' ', w:640, multiplicator:100, precision:2, fontColor:'#D4B87B' });
+group.open();
+
+b1.onChange(function() { if( ois ) ois.SetOutput( "AXIS0", b1.value ); });
+s1.onChange(function() { if( ois ) ois.SetOutput( "AXIS0", s1.value ); });
+
+//b1.value
+
+</script>
+
+   </body>
+</html>
