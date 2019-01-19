@@ -91,7 +91,7 @@ void DoConnectingGui(struct nk_context* ctx)
 				delete g.device;
 				delete g.port;
 				g.port = new OisPortSerial(it->path.c_str());
-				g.device = new OisDevice(*g.port, it->name, 1, "vJoy");
+				g.device = new OisDevice(*g.port, it->name, GAME_VERSION, GAME_NAME);
 			}
 		}
 	}

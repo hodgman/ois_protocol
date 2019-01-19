@@ -1,4 +1,7 @@
 
+#define GAME_VERSION 1
+#define GAME_NAME    "OisHub"
+
 void OisLog( const char* category, const char* fmt, ... );
 
 #define OIS_INFO( fmt, ... ) OisLog("INFO", fmt, __VA_ARGS__);
