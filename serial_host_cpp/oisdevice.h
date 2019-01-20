@@ -223,7 +223,7 @@ public:
 			return false;
 		for( uint16_t channel : m_eventBuffer )
 		{
-			Event* e = FindChannel(m_events, channel);
+			const Event* e = FindChannel(m_events, channel);
 			if( e )
 				fn(*e);
 		}

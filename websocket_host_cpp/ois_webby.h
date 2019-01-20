@@ -62,6 +62,8 @@ public:
 	}
 	OisWebsocketPort m_port;
 	OisDevice m_device;
+	std::vector<const char*> m_eventLog;
+	bool abort = false;
 };
 
 #include "webby/webby.h"
@@ -113,6 +115,17 @@ public:
 	}
 	
 	const OIS_VECTOR<OisWebsocketConnection*>& Connections() const { return m_connections; }
+	bool Disconnect(const OisDevice& d)
+	{
+		auto it = std::find_if(m_connections.begin(), m_connections.end(), [&d](OisWebsocketConnection* item)
+		{
+			return &item->m_device == &d;
+		});
+		if( it == m_connections.end() )
+			return false;
+		
+		(*it)->abort = true;
+	}
 private:
 	OIS_VECTOR<OisWebsocketConnection*> m_connections;
 	OIS_VECTOR<char> m_memory;
@@ -184,7 +197,7 @@ private:
 		}
 		return r;
 	}
-	static void webby_ws_poll(struct WebbyConnection *connection)
+	static int webby_ws_poll(struct WebbyConnection *connection)
 	{
 		OisWebsocketConnection* oisConnection = (OisWebsocketConnection*)connection->user_data;
 		OIS_VECTOR<OisWebsocketPort::Frame>& portBuffer = oisConnection->m_port.writeBuffer;
@@ -195,6 +208,8 @@ private:
 			WebbyEndSocketFrame( connection );
 		}
 		portBuffer.clear();
+
+		return oisConnection->abort ? 1 : 0;
 	}
 
 };

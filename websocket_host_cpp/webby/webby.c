@@ -1380,7 +1380,8 @@ WebbyServerUpdate(struct WebbyServer *srv)
     {
       if (srv->config.ws_poll && 0!=(connection->flags & WB_WEBSOCKET))
       {
-        (*srv->config.ws_poll)(&connection->public_data);
+        if (0!=(*srv->config.ws_poll)(&connection->public_data))
+          connection->flags &= ~WB_ALIVE;
       }
       ++i;
     }

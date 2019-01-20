@@ -151,8 +151,10 @@ struct WebbyServerConfig
 
   /*
    * Called when a WebSocket connection is polled.
+   *
+   * Return non-zero to close the connection.
    */
-  void (*ws_poll)(struct WebbyConnection *connection);
+  int (*ws_poll)(struct WebbyConnection *connection);
 
   /*
    * Called when a WebSocket data frame is incoming.

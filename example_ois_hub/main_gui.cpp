@@ -53,7 +53,7 @@ int main( int argc, char *argv[] )
 
 void DoLogGui(struct nk_context* ctx)
 {
-    nk_layout_row_dynamic(ctx, 30, 1);
+	nk_layout_row_dynamic(ctx, 30, 1);
 	if( nk_button_label(ctx, "Clear Log") )
 	{
 		g.log.clear();
@@ -70,20 +70,22 @@ void DoLogGui(struct nk_context* ctx)
 
 void DoConnectingGui(struct nk_context* ctx)
 {
-    nk_layout_row_dynamic(ctx, 30, 1);
+	nk_layout_row_dynamic(ctx, 30, 1);
 	
-	if( nk_button_label(ctx, "Scan COM ports") || g.firstFrame )
+	static bool firstFrame = true;
+	static OIS_PORT_LIST portList;
+	if( nk_button_label(ctx, "Scan COM ports") || firstFrame )
 	{
-		g.firstFrame = false;
-		g.portList.clear();
-		SerialPort::EnumerateSerialPorts(g.portList, g.sb, -1);
+		firstFrame = false;
+		portList.clear();
+		SerialPort::EnumerateSerialPorts(portList, g.sb, -1);
 	}
 
-	if( g.portList.empty() )
+	if( portList.empty() )
 		nk_label(ctx, "No ports scanned...", NK_TEXT_LEFT);
 	else
 	{
-		for( auto it = g.portList.begin(); it != g.portList.end(); ++it )
+		for( auto it = portList.begin(); it != portList.end(); ++it )
 		{
 			std::string label = it->name + '(' + it->path + ')';
 			if( nk_button_label(ctx, label.c_str()) )
@@ -94,19 +96,20 @@ void DoConnectingGui(struct nk_context* ctx)
 	}
 }
 
-void DoOisGui(struct nk_context* ctx, OisDevice* device)
+void DoOisGui(struct nk_context* ctx, OisDeviceEx& d)
 {
+	OisDevice* device = d.device;
 	if( !device )
 		return;
-    const float ratio2[] = {0.4f, 0.6f};
+	const float ratio2[] = {0.4f, 0.6f};
 	
-    nk_layout_row_dynamic(ctx, 30, 1);
+	nk_layout_row_dynamic(ctx, 30, 1);
 	if( nk_button_label(ctx, "Disconnect") )
 	{
 		InputOis_Disconnect(*device);
 		return;
 	}
-    nk_layout_row(ctx, NK_DYNAMIC, 30, 2, ratio2);
+	nk_layout_row(ctx, NK_DYNAMIC, 30, 2, ratio2);
 	nk_label(ctx, "Name", NK_TEXT_LEFT);
 	nk_label(ctx, device->GetDeviceName(), NK_TEXT_LEFT);
 	nk_label(ctx, "PID", NK_TEXT_LEFT);
@@ -123,21 +126,21 @@ void DoOisGui(struct nk_context* ctx, OisDevice* device)
 	else
 		nk_label(ctx, "Handshake", NK_TEXT_LEFT);
 	
-    nk_layout_row_dynamic(ctx, 30, 1);
+	nk_layout_row_dynamic(ctx, 30, 1);
 	nk_label(ctx, "Numeric Inputs", NK_TEXT_LEFT);
 	
 	if (nk_tree_push(ctx, NK_TREE_TAB, "Events", NK_MAXIMIZED))
 	{
 		if( nk_button_label(ctx, "Clear Event Log") )
 		{
-			g.eventLog.clear();
+			d.eventLog.clear();
 		}
 		nk_layout_row_dynamic(ctx, 200, 1);
 		if( nk_group_begin(ctx, "Event Log", 0) )
 		{
 			nk_layout_row_dynamic(ctx, 30, 1);
-			for( auto it = g.eventLog.begin(); it != g.eventLog.end(); ++it )
-				nk_label(ctx, it->c_str(), NK_TEXT_LEFT);
+			for( auto it = d.eventLog.begin(); it != d.eventLog.end(); ++it )
+				nk_label(ctx, *it, NK_TEXT_LEFT);
 			nk_group_end(ctx);
 		}
 		nk_tree_pop(ctx);
@@ -178,7 +181,7 @@ void DoOisGui(struct nk_context* ctx, OisDevice* device)
 					case OisDevice::Fraction: 
 					{
 						float fraction = it->value.fraction;
-						nk_property_float(ctx, name.c_str(), SHRT_MIN/100.0f, &fraction, SHRT_MAX/100.0f, 1, 1);
+						nk_property_float(ctx, name.c_str(), SHRT_MIN/100.0f, &fraction, SHRT_MAX/100.0f, 0.01f, 0.01f);
 						set = fraction != it->value.fraction;
 						newValue.fraction = fraction;
 						break;
@@ -228,7 +231,7 @@ struct VJoyState
 } g_vJoyState;
 void DoVJoyGui(struct nk_context* ctx)
 {
-    nk_layout_row_dynamic(ctx, 30, 1);
+	nk_layout_row_dynamic(ctx, 30, 1);
 	if( !s_enableVJoyOutput )
 	{
 		if( nk_button_label(ctx, "Enable vJoy output") )
@@ -251,7 +254,7 @@ void DoVJoyGui(struct nk_context* ctx)
 
 	if( g_vJoyState.numButtons )
 		nk_label(ctx, "Buttons", NK_TEXT_ALIGN_LEFT);
-    nk_layout_row_dynamic(ctx, 30, 5);
+	nk_layout_row_dynamic(ctx, 30, 5);
 	for( int i=0; i!=g_vJoyState.numButtons; ++i )
 	{
 		char label[32];
@@ -260,7 +263,7 @@ void DoVJoyGui(struct nk_context* ctx)
 	}
 }
 
-void DoVJoyUpdate(std::vector<std::pair<OisDevice*, std::vector<const OisDevice::Event*>>>& devices)
+void DoVJoyUpdate(std::vector<OisDeviceEx*>& devices)
 {
 	for( int i=0; i!=g_vJoyState.numButtons; ++i )
 		g_vJoyState.buttonValues[i] = false;
@@ -270,7 +273,7 @@ void DoVJoyUpdate(std::vector<std::pair<OisDevice*, std::vector<const OisDevice:
 	
 	for( auto& item : devices )
 	{
-		OisDevice* device = item.first;
+		OisDevice* device = item->device;
 		if( !device || !device->Connected() )
 			continue;
 		
@@ -278,7 +281,7 @@ void DoVJoyUpdate(std::vector<std::pair<OisDevice*, std::vector<const OisDevice:
 		const auto& outputs = device->DeviceOutputs();
 
 		//map events onto buttons:
-		for( auto it = item.second.begin(); it != item.second.end(); ++it )
+		for( auto it = item->newEvents.begin(); it != item->newEvents.end(); ++it )
 		{
 			const OisDevice::Event* event = *it;
 			int index = (int)(ptrdiff_t)(event - &events.front());
@@ -313,12 +316,9 @@ void DoVJoyUpdate(std::vector<std::pair<OisDevice*, std::vector<const OisDevice:
 	}
 }
 
-void MainLoop(struct nk_context* ctx)
+void DrawGui(struct nk_context* ctx, std::vector<OisDeviceEx*>& devices)
 {
-	std::vector<std::pair<OisDevice*, std::vector<const OisDevice::Event*>>> devices;
-	InputOis_Update( devices );
-
-	if (nk_begin(ctx, "OIS", nk_rect(0, 0, (float)gdi.width/2-2, (float)gdi.height), 0))
+	if (nk_begin(ctx, "Inputs", nk_rect(0, 0, (float)gdi.width/2-2, (float)gdi.height), 0))
 	{
 		if (nk_tree_push(ctx, NK_TREE_TAB, "Ois Log", NK_MAXIMIZED))
 		{
@@ -330,97 +330,97 @@ void MainLoop(struct nk_context* ctx)
 		{
 			if (nk_tree_push(ctx, NK_TREE_TAB, "Ois Input", NK_MAXIMIZED))
 			{
-				DoOisGui(ctx, item.first);
+				DoOisGui(ctx, *item);
 				nk_tree_pop(ctx);
 			}
 		}
 	}
 	nk_end(ctx);
-	if (nk_begin(ctx, "VJOY", nk_rect((float)gdi.width/2+2, 0, (float)gdi.width/2-2, (float)gdi.height), 0))
+	if (nk_begin(ctx, "Outputs", nk_rect((float)gdi.width/2+2, 0, (float)gdi.width/2-2, (float)gdi.height), 0))
 	{
 		DoVJoyGui(ctx);
 	}
 	nk_end(ctx);
-
-	DoVJoyUpdate(devices);
+	
+	nk_gdi_render( nk_rgb(30,30,30) );
 }
 
 static LRESULT CALLBACK WindowProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
-    switch (msg)
-    {
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        return 0;
-    }
+	switch (msg)
+	{
+	case WM_DESTROY:
+		PostQuitMessage(0);
+		return 0;
+	}
 
-    if (nk_gdi_handle_event(wnd, msg, wparam, lparam))
-        return 0;
+	if (nk_gdi_handle_event(wnd, msg, wparam, lparam))
+		return 0;
 
-    return DefWindowProcW(wnd, msg, wparam, lparam);
+	return DefWindowProcW(wnd, msg, wparam, lparam);
 }
 
 void RunDemoGui()
 {
-    GdiFont* font;
-    struct nk_context *ctx;
+	GdiFont* font;
+	struct nk_context *ctx;
 
-    WNDCLASSW wc;
-    ATOM atom;
-    RECT rect = { 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT };
-    DWORD style = WS_OVERLAPPEDWINDOW;
-    DWORD exstyle = WS_EX_APPWINDOW;
-    HWND wnd;
-    HDC dc;
-    int running = 1;
+	WNDCLASSW wc = {};
+	ATOM atom;
+	RECT rect = { 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT };
+	DWORD style = WS_OVERLAPPEDWINDOW;
+	DWORD exstyle = WS_EX_APPWINDOW;
+	HWND wnd;
+	HDC dc;
+	int running = 1;
 
-    /* Win32 */
-    memset(&wc, 0, sizeof(wc));
-    wc.style = CS_DBLCLKS;
-    wc.lpfnWndProc = WindowProc;
-    wc.hInstance = GetModuleHandleW(0);
-    wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.lpszClassName = L"Ois2vJoyWindowClass";
-    atom = RegisterClassW(&wc);
+	wc.style = CS_DBLCLKS;
+	wc.lpfnWndProc = WindowProc;
+	wc.hInstance = GetModuleHandleW(0);
+	wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+	wc.lpszClassName = L"Ois2vJoyWindowClass";
+	atom = RegisterClassW(&wc);
 
-    AdjustWindowRectEx(&rect, style, FALSE, exstyle);
-    wnd = CreateWindowExW(exstyle, wc.lpszClassName, L"Ois2vJoy Demo",
-        style | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT,
-        rect.right - rect.left, rect.bottom - rect.top,
-        NULL, NULL, wc.hInstance, NULL);
-    dc = GetDC(wnd);
+	AdjustWindowRectEx(&rect, style, FALSE, exstyle);
+	wnd = CreateWindowExW(exstyle, wc.lpszClassName, L"Ois2vJoy Demo",
+	                      style | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT,
+	                      rect.right - rect.left, rect.bottom - rect.top,
+	                      NULL, NULL, wc.hInstance, NULL);
+	dc = GetDC(wnd);
 
-    font = nk_gdifont_create("Arial", 24);
-    ctx = nk_gdi_init(font, dc, WINDOW_WIDTH, WINDOW_HEIGHT);
+	font = nk_gdifont_create("Arial", 24);
+	ctx = nk_gdi_init(font, dc, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-	
 	InputOis_Init();
-
-    while (running)
-    {
-        /* Input */
-        MSG msg;
-        nk_input_begin(ctx);
-
-        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
-            if (msg.message == WM_QUIT)
-                running = 0;
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-        nk_input_end(ctx);
+	
+	std::vector<OisDeviceEx*> devices;
+	while( running )
+	{
+		MSG msg;
+		nk_input_begin( ctx );
+		while( PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE) ) 
+		{
+			if( msg.message == WM_QUIT )
+				running = 0;
+			TranslateMessage(&msg);
+			DispatchMessageW(&msg);
+		}
+		nk_input_end( ctx );
 		
-		MainLoop(ctx);
+		InputOis_Update( devices );
 
-        nk_gdi_render(nk_rgb(30,30,30));
+		DrawGui( ctx, devices );
+		
+		DoVJoyUpdate( devices );
 
 		Sleep(1);
-    }
+		devices.clear();
+	}
 	
 	InputOis_Shutdown();
 
-    nk_gdifont_del(font);
-    ReleaseDC(wnd, dc);
-    UnregisterClassW(wc.lpszClassName, wc.hInstance);
+	nk_gdifont_del(font);
+	ReleaseDC(wnd, dc);
+	UnregisterClassW(wc.lpszClassName, wc.hInstance);
 }

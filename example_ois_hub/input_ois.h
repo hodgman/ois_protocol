@@ -12,24 +12,28 @@ void OisLog( const char* category, const char* fmt, ... );
 
 #include "../serial_host_cpp/oisdevice.h"
 
+struct OisDeviceEx
+{
+	IOisPort* port = nullptr;
+	OisDevice* device = nullptr;
+	std::vector<const char*> eventLog;
+	std::vector<const OisDevice::Event*> newEvents;
+	int updateCount = 0;
+};
+
 void InputOis_Init();
-void InputOis_Update( std::vector<std::pair<OisDevice*, std::vector<const OisDevice::Event*>>>& devices );
+void InputOis_Update( std::vector<OisDeviceEx*>& devices );
 void InputOis_Shutdown();
 
 void InputOis_Connect(const PortName&);
 void InputOis_Disconnect(const OisDevice&);
 
+
+
 struct AppGlobals
 {
-	OisPortSerial* port = nullptr;
-	OisDevice* device = nullptr;
-	OIS_PORT_LIST portList;
-	bool firstFrame = true;
-	
 	OIS_STRING_BUILDER sb;
 	std::vector<std::string> log;
-
-	std::vector<std::string> eventLog;
 };
 
 extern AppGlobals g;

@@ -3,12 +3,92 @@
 #define OIS_DEVICE_IMPL
 #define OIS_SERIALPORT_IMPL
 #include "input_ois.h"
+#include <algorithm>
 
 #include "../websocket_host_cpp/ois_webby.h"
 
-AppGlobals g;
 
-OisWebsocketHost* g_websockets = nullptr;
+class OisSerialConnection
+{
+public:
+	OisSerialConnection(const char* portName, const OIS_STRING& name, unsigned gameVersion, const char* gameName)
+		: m_port(portName)
+		, m_device(m_port, name, gameVersion, gameName)
+	{
+	}
+	OisPortSerial m_port;
+	OisDevice m_device;
+};
+
+class OisSerialConnectionList
+{
+public:
+	~OisSerialConnectionList() { Clear(); }
+	void Clear()
+	{
+		for( auto* d : devices )
+			delete d;
+	}
+
+	std::vector<OisSerialConnection*> devices;
+	
+	auto Find(const OisDevice& d)
+	{
+		return std::find_if(devices.begin(), devices.end(), [&d](OisSerialConnection* item)
+		{
+			return &item->m_device == &d;
+		});
+	}
+};
+
+class OisAllConnectionList
+{
+public:
+	std::vector<OisDeviceEx> devices;
+
+	OisDeviceEx& Find(IOisPort* p, OisDevice* d)
+	{
+		auto it = std::find_if(devices.begin(), devices.end(), [d](const OisDeviceEx& item)
+		{
+			return item.device == d;
+		});
+		if( it == devices.end() )
+		{
+			OisDeviceEx e;
+			e.port = p;
+			e.device = d;
+			e.updateCount = updateCount;
+			devices.push_back(e);
+			return devices.back();
+		}
+		else
+		{
+			it->updateCount = updateCount;
+			return *it;
+		}
+	}
+	void GarbageCollect()
+	{
+		for( size_t i=0; i!=devices.size(); )
+		{
+			if( devices[i].updateCount < updateCount )
+			{
+				std::swap(devices[i], devices.back());
+				devices.pop_back();
+			}
+			else
+				++i;
+		}
+		++updateCount;
+	}
+private:
+	int updateCount = 0;
+};
+
+static OisAllConnectionList    g_allDevices;
+static OisSerialConnectionList g_serialConnections;
+static OisWebsocketHost*       g_websockets = nullptr;
+AppGlobals g;
 
 void InputOis_Init()
 {
@@ -16,49 +96,66 @@ void InputOis_Init()
 	g_websockets = new OisWebsocketHost(GAME_VERSION, GAME_NAME, 8080);
 }
 
-static void UpdateDevice( OisDevice& device, std::vector<std::pair<OisDevice*, std::vector<const OisDevice::Event*>>>& devices )
+static void UpdateDevice( OisDeviceEx& d )
 {
-	devices.push_back({&device, {}});
-	std::vector<const OisDevice::Event*>& eventsThisLoop = devices.back().second;
-	device.Poll(g.sb);
-	device.PopEvents([&](const OisDevice::Event& event)
+	d.device->Poll(g.sb);
+	d.newEvents.clear();
+	d.device->PopEvents([&](const OisDevice::Event& event)
 	{
-		g.eventLog.push_back(event.name);
-		eventsThisLoop.push_back(&event);
+		d.eventLog.push_back(event.name.c_str());
+		d.newEvents.push_back(&event);
 	});
 }
 
-void InputOis_Update( std::vector<std::pair<OisDevice*, std::vector<const OisDevice::Event*>>>& devices )
+void InputOis_Update( std::vector<OisDeviceEx*>& devices )
 {
 	if( !g_websockets )
 		return;
-
-	if( g.device )
-		UpdateDevice( *g.device, devices );
+	
+	for( auto* c : g_serialConnections.devices )
+	{
+		OisDeviceEx& d = g_allDevices.Find( &c->m_port, &c->m_device );
+		UpdateDevice( d );
+	}
 
 	g_websockets->Poll();
-	auto& connections = g_websockets->Connections();
-	for( auto* c : connections )
-		UpdateDevice( c->m_device, devices );
+	for( auto* c : g_websockets->Connections() )
+	{
+		OisDeviceEx& d = g_allDevices.Find( &c->m_port, &c->m_device );
+		UpdateDevice( d );
+	}
+
+	g_allDevices.GarbageCollect();
+	
+	for( auto& d : g_allDevices.devices )
+		devices.push_back(&d);
 }
 
 void InputOis_Shutdown()
 {
 	delete g_websockets;
 	g_websockets = 0;
+	g_serialConnections.Clear();
+	g_allDevices.GarbageCollect();
 }
 
 void InputOis_Connect(const PortName& portName)
 {
-	delete g.device;
-	delete g.port;
-	g.port = new OisPortSerial(portName.path.c_str());
-	g.device = new OisDevice(*g.port, portName.name, GAME_VERSION, GAME_NAME);
+	g_serialConnections.devices.push_back( new OisSerialConnection(portName.path.c_str(), portName.name, GAME_VERSION, GAME_NAME) );
 }
-void InputOis_Disconnect(const OisDevice&)
+
+void InputOis_Disconnect(const OisDevice& d)
 {
-	delete g.device;
-	g.device = nullptr;
+	auto it = g_serialConnections.Find(d);
+	if( it != g_serialConnections.devices.end() )
+	{
+		std::swap( *it, g_serialConnections.devices.back() );
+		g_serialConnections.devices.pop_back();
+	}
+	else
+	{
+		g_websockets->Disconnect(d);
+	}
 }
 
 void OisLog(const char* category, const char* fmt, ...)

@@ -34,7 +34,6 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 	var log = logFunction ? logFunction : function() {};
 		
 	this.wsOpen = false;
-	this.deviceState = OisDeviceState.Handshaking;
 	this.maxVersion = version > 0 ? version : 2;
 	this.deviceName = deviceName;
 	this.pid = pid;
@@ -295,6 +294,7 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 	
 	function Reset()
 	{
+		self.deviceState = OisDeviceState.Handshaking;
 		self.binary = false;
 		self.commandBuffer = "";
 		self.writeBuffer = "";
