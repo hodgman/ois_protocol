@@ -117,8 +117,8 @@ void DoOisGui(struct nk_context* ctx, OisDeviceEx& d)
 	nk_labelf(ctx, NK_TEXT_LEFT, "0x%8X", device->GetProductID());
 	nk_label(ctx, "VID", NK_TEXT_LEFT);
 	nk_labelf(ctx, NK_TEXT_LEFT, "0x%8X", device->GetVendorID());
-//	nk_label(ctx, "Port", NK_TEXT_LEFT);
-//	nk_labelf(ctx, NK_TEXT_LEFT, "%s", port->PortName().c_str());
+	nk_label(ctx, "Port", NK_TEXT_LEFT);
+	nk_labelf(ctx, NK_TEXT_LEFT, "%s", d.port->Name());
 	nk_label(ctx, "State", NK_TEXT_LEFT);
 	if( device->Connected() )
 		nk_label(ctx, "Active", NK_TEXT_LEFT);
@@ -128,7 +128,6 @@ void DoOisGui(struct nk_context* ctx, OisDeviceEx& d)
 		nk_label(ctx, "Handshake", NK_TEXT_LEFT);
 	
 	nk_layout_row_dynamic(ctx, 30, 1);
-	nk_label(ctx, "Numeric Inputs", NK_TEXT_LEFT);
 	
 	if (nk_tree_push(ctx, NK_TREE_TAB, "Events", NK_MAXIMIZED))
 	{

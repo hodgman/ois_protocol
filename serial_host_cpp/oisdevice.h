@@ -132,6 +132,7 @@ public:
 	virtual void Disconnect() = 0;
 	virtual int  Read(char* buffer, int size) = 0;
 	virtual bool Write(const char* buffer, int size) = 0;
+	virtual const char* Name() { return ""; }
 };
 
 #ifdef OIS_SERIALPORT_INCLUDED
@@ -161,7 +162,10 @@ public:
 	{
 		return m_port.Write(buffer, size);
 	}
-	const OIS_STRING& PortName() const { return m_port.PortName(); }
+	virtual const char* Name()
+	{
+		return m_port.PortName().c_str();
+	}
 private:
 	SerialPort m_port;
 };

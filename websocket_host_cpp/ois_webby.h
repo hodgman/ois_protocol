@@ -46,6 +46,10 @@ public:
 		memcpy(&writeBuffer.back().data.front(), buffer, size);
 		return true;
 	}
+	virtual const char* Name()
+	{
+		return "Websocket";
+	}
 	
 	struct Frame
 	{
@@ -142,13 +146,47 @@ private:
 		OIS_WEBBY_INFO( "Webby: %s", text);
 	}
 
-	static int webby_dispatch(struct WebbyConnection *connection)
+	static int webby_dispatch(struct WebbyConnection* connection)
 	{
-		OIS_WEBBY_INFO( "[webby_dispatch] url:%s", connection->request.uri);
-		bool handled = false;
-		return handled?0:1;
+	//todo - move into example app?
+		const char* uri = connection->request.uri;
+		OIS_WEBBY_INFO( "[webby_dispatch] url:%s", uri);
+		OIS_STRING_BUILDER sb;
+		const char* path = "";
+		if( 0==strcmp(uri, "/") )
+			path = "../websocket_device_html/example/test.html";
+		else if( 0==strcmp(uri, "/ois_protocol.js") )
+			path = "../websocket_device_html/ois_protocol.js";
+		else 
+			path = sb.FormatTemp("../websocket_device_html/example%s", uri);
+		FILE* fp = fopen(path, "rb");
+		if( fp )
+		{
+			fseek(fp, 0L, SEEK_END);
+			long size = ftell(fp);
+			rewind(fp);
+			if( 0 == WebbyBeginResponse(connection, 200, size, 0, 0) )
+			{
+				std::vector<char> data(size);
+				char* buffer = &data.front();
+				fread(buffer, 1, size, fp);
+				WebbyWrite(connection, buffer, size);
+				WebbyEndResponse(connection);
+			}
+			fclose(fp);
+		}
+		else
+		{
+			static const char failMessage[] = "404";
+			if( 0 == WebbyBeginResponse(connection, 404, sizeof(failMessage), 0, 0) )
+			{
+				WebbyWrite(connection, failMessage, sizeof(failMessage));
+				WebbyEndResponse(connection);
+			}
+		}
+		return 0;
 	}
-	static int webby_ws_connect(struct WebbyConnection *connection)
+	static int webby_ws_connect(struct WebbyConnection* connection)
 	{
 		OIS_WEBBY_INFO( "[webby_ws_connect] method:%s", connection->request.method);
 		OIS_WEBBY_INFO( "[webby_ws_connect] uri:%s", connection->request.uri);
@@ -172,7 +210,7 @@ private:
 		}
 		return handled?0:1;
 	}
-	static void webby_ws_connected(struct WebbyConnection *connection)
+	static void webby_ws_connected(struct WebbyConnection* connection)
 	{
 		OIS_WEBBY_INFO( "[webby_ws_connected] url:%s", connection->request.uri);
 	}
@@ -185,7 +223,7 @@ private:
 		connection->user_data = 0;
 		delete oisConnection;
 	}
-	static int webby_ws_frame(struct WebbyConnection *connection, const struct WebbyWsFrame *frame)
+	static int webby_ws_frame(struct WebbyConnection* connection, const struct WebbyWsFrame* frame)
 	{
 		OIS_WEBBY_INFO( "[webby_ws_frame] url:%s", connection->request.uri);
 		OisWebsocketConnection* oisConnection = (OisWebsocketConnection*)connection->user_data;
@@ -201,7 +239,7 @@ private:
 		}
 		return r;
 	}
-	static int webby_ws_poll(struct WebbyConnection *connection)
+	static int webby_ws_poll(struct WebbyConnection* connection)
 	{
 		OisWebsocketConnection* oisConnection = (OisWebsocketConnection*)connection->user_data;
 		OIS_VECTOR<OisWebsocketPort::Frame>& portBuffer = oisConnection->m_port.writeBuffer;
