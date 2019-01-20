@@ -88,41 +88,37 @@ void DoConnectingGui(struct nk_context* ctx)
 			std::string label = it->name + '(' + it->path + ')';
 			if( nk_button_label(ctx, label.c_str()) )
 			{
-				delete g.device;
-				delete g.port;
-				g.port = new OisPortSerial(it->path.c_str());
-				g.device = new OisDevice(*g.port, it->name, GAME_VERSION, GAME_NAME);
+				InputOis_Connect(*it);
 			}
 		}
 	}
 }
 
-void DoOisGui(struct nk_context* ctx)
+void DoOisGui(struct nk_context* ctx, OisDevice* device)
 {
-	if( !g.device )
+	if( !device )
 		return;
     const float ratio2[] = {0.4f, 0.6f};
 	
     nk_layout_row_dynamic(ctx, 30, 1);
 	if( nk_button_label(ctx, "Disconnect") )
 	{
-		delete g.device;
-		g.device = nullptr;
+		InputOis_Disconnect(*device);
 		return;
 	}
     nk_layout_row(ctx, NK_DYNAMIC, 30, 2, ratio2);
 	nk_label(ctx, "Name", NK_TEXT_LEFT);
-	nk_label(ctx, g.device->GetDeviceName(), NK_TEXT_LEFT);
+	nk_label(ctx, device->GetDeviceName(), NK_TEXT_LEFT);
 	nk_label(ctx, "PID", NK_TEXT_LEFT);
-	nk_labelf(ctx, NK_TEXT_LEFT, "0x%8X", g.device->GetProductID());
+	nk_labelf(ctx, NK_TEXT_LEFT, "0x%8X", device->GetProductID());
 	nk_label(ctx, "VID", NK_TEXT_LEFT);
-	nk_labelf(ctx, NK_TEXT_LEFT, "0x%8X", g.device->GetVendorID());
-	nk_label(ctx, "Port", NK_TEXT_LEFT);
-	nk_labelf(ctx, NK_TEXT_LEFT, "%s", g.port->PortName().c_str());
+	nk_labelf(ctx, NK_TEXT_LEFT, "0x%8X", device->GetVendorID());
+//	nk_label(ctx, "Port", NK_TEXT_LEFT);
+//	nk_labelf(ctx, NK_TEXT_LEFT, "%s", port->PortName().c_str());
 	nk_label(ctx, "State", NK_TEXT_LEFT);
-	if( g.device->Connected() )
+	if( device->Connected() )
 		nk_label(ctx, "Active", NK_TEXT_LEFT);
-	else if( g.device->Connecting() )
+	else if( device->Connecting() )
 		nk_label(ctx, "Sync", NK_TEXT_LEFT);
 	else
 		nk_label(ctx, "Handshake", NK_TEXT_LEFT);
@@ -149,7 +145,7 @@ void DoOisGui(struct nk_context* ctx)
 
 	if (nk_tree_push(ctx, NK_TREE_TAB, "Inputs", NK_MAXIMIZED))
 	{
-		auto& inputs = g.device->DeviceInputs();
+		auto& inputs = device->DeviceInputs();
 		for( auto it = inputs.begin(); it != inputs.end(); ++it )
 		{
 			std::string name = it->name + " : ch" + std::to_string(it->channel);
@@ -189,7 +185,7 @@ void DoOisGui(struct nk_context* ctx)
 					}
 				}
 				if( set )
-					g.device->SetInput(*it, newValue);
+					device->SetInput(*it, newValue);
 				nk_tree_pop(ctx);
 			}
 		}
@@ -198,7 +194,7 @@ void DoOisGui(struct nk_context* ctx)
 	
 	if (nk_tree_push(ctx, NK_TREE_TAB, "Outputs", NK_MAXIMIZED))
 	{
-		auto& outputs = g.device->DeviceOutputs();
+		auto& outputs = device->DeviceOutputs();
 		for( auto it = outputs.begin(); it != outputs.end(); ++it )
 		{
 			std::string name = it->name + " : ch" + std::to_string(it->channel);
@@ -223,6 +219,13 @@ void DoOisGui(struct nk_context* ctx)
 
 static bool s_enableVJoyOutput = false;
 static char s_vjoyError[1024] = {'\0'};
+struct VJoyState
+{
+	float axisValues[8] = {};
+	bool buttonValues[128] = {};
+	int numButtons = 0;
+	int numAxes = 0;
+} g_vJoyState;
 void DoVJoyGui(struct nk_context* ctx)
 {
     nk_layout_row_dynamic(ctx, 30, 1);
@@ -241,78 +244,79 @@ void DoVJoyGui(struct nk_context* ctx)
 		return;
 	}
 
-	if( g.numAxes )
+	if( g_vJoyState.numAxes )
 		nk_label(ctx, "Axes", NK_TEXT_ALIGN_LEFT);
-	for( int i=0; i!=g.numAxes; ++i )
-		nk_slider_float(ctx, -1, &g.axisValues[i], 1, 0.1f);
+	for( int i=0; i!=g_vJoyState.numAxes; ++i )
+		nk_slider_float(ctx, -1, &g_vJoyState.axisValues[i], 1, 0.1f);
 
-	if( g.numButtons )
+	if( g_vJoyState.numButtons )
 		nk_label(ctx, "Buttons", NK_TEXT_ALIGN_LEFT);
     nk_layout_row_dynamic(ctx, 30, 5);
-	for( int i=0; i!=g.numButtons; ++i )
+	for( int i=0; i!=g_vJoyState.numButtons; ++i )
 	{
 		char label[32];
 		sprintf(label, "Btn%d", i);
-		nk_check_label(ctx, label, g.buttonValues[i]);
+		nk_check_label(ctx, label, g_vJoyState.buttonValues[i]);
 	}
 }
 
-void DoVJoyUpdate()
+void DoVJoyUpdate(std::vector<std::pair<OisDevice*, std::vector<const OisDevice::Event*>>>& devices)
 {
-	if( !g.device || !g.device->Connected() )
-	{
-		VJoy_Pause();
-		return;
-	}
-
-	const auto& events = g.device->DeviceEvents();
-	const auto& outputs = g.device->DeviceOutputs();
-
-	int numButtons = events.size();
+	for( int i=0; i!=g_vJoyState.numButtons; ++i )
+		g_vJoyState.buttonValues[i] = false;
+	
+	int numButtons = 0;
 	int numAxes = 0;
-
-	//map events onto buttons:
-	for( int i=0; i!=numButtons; ++i )
-		g.buttonValues[i] = false;
-	for( auto it = g.eventsThisLoop.begin(); it != g.eventsThisLoop.end(); ++it )
+	
+	for( auto& item : devices )
 	{
-		const OisDevice::Event* event = *it;
-		int index = (int)(ptrdiff_t)(event - &events.front());
-		if( index >= 0 && index < numButtons )
-			g.buttonValues[index] = true;
-	}
+		OisDevice* device = item.first;
+		if( !device || !device->Connected() )
+			continue;
+		
+		const auto& events  = device->DeviceEvents();
+		const auto& outputs = device->DeviceOutputs();
 
-	//numeric output bools to buttons, others to axes
-	for( auto it = outputs.begin(); it != outputs.end(); ++it )
-	{
-		if( it->type == OisDevice::Boolean )
-			g.buttonValues[numButtons++] = it->value.boolean;
-		else
+		//map events onto buttons:
+		for( auto it = item.second.begin(); it != item.second.end(); ++it )
 		{
-			if( it->type == OisDevice::Number )
-				g.axisValues[numAxes++] = it->value.number / (float)MAXSHORT;
+			const OisDevice::Event* event = *it;
+			int index = (int)(ptrdiff_t)(event - &events.front());
+			if( index >= 0 && index < numButtons )
+				g_vJoyState.buttonValues[index] = true;
+		}
+
+		//numeric output bools to buttons, others to axes
+		for( auto it = outputs.begin(); it != outputs.end(); ++it )
+		{
+			if( it->type == OisDevice::Boolean )
+				g_vJoyState.buttonValues[numButtons++] = it->value.boolean;
 			else
-				g.axisValues[numAxes++] = it->value.fraction / (MAXSHORT/100.0f);
+			{
+				if( it->type == OisDevice::Number )
+					g_vJoyState.axisValues[numAxes++] = it->value.number / (float)MAXSHORT;
+				else
+					g_vJoyState.axisValues[numAxes++] = it->value.fraction / 100.0f;
+			}
 		}
 	}
-	g.numButtons = numButtons;
-	g.numAxes = numAxes;
 
-	VJoy_Update(numAxes, g.axisValues, numButtons, g.buttonValues);
+	if( numButtons || numAxes )
+	{
+		g_vJoyState.numButtons = numButtons;
+		g_vJoyState.numAxes = numAxes;
+		VJoy_Update(numAxes, g_vJoyState.axisValues, numButtons, g_vJoyState.buttonValues);
+	}
+	else 
+	{
+		VJoy_Pause();
+	}
 }
 
 void MainLoop(struct nk_context* ctx)
 {
-	g.eventsThisLoop.clear();
-	if( g.device )
-	{
-		g.device->Poll(g.sb);
-		g.device->PopEvents([](const OisDevice::Event& event)
-		{
-			g.eventLog.push_back(event.name);
-			g.eventsThisLoop.push_back(&event);
-		});
-	}
+	std::vector<std::pair<OisDevice*, std::vector<const OisDevice::Event*>>> devices;
+	InputOis_Update( devices );
 
 	if (nk_begin(ctx, "OIS", nk_rect(0, 0, (float)gdi.width/2-2, (float)gdi.height), 0))
 	{
@@ -321,17 +325,14 @@ void MainLoop(struct nk_context* ctx)
 			DoLogGui(ctx);
 			nk_tree_pop(ctx);
 		}
-		if( g.device )
+		DoConnectingGui(ctx);
+		for( auto& item : devices )
 		{
 			if (nk_tree_push(ctx, NK_TREE_TAB, "Ois Input", NK_MAXIMIZED))
 			{
-				DoOisGui(ctx);
+				DoOisGui(ctx, item.first);
 				nk_tree_pop(ctx);
 			}
-		}
-		else
-		{
-			DoConnectingGui(ctx);
 		}
 	}
 	nk_end(ctx);
@@ -341,7 +342,7 @@ void MainLoop(struct nk_context* ctx)
 	}
 	nk_end(ctx);
 
-	DoVJoyUpdate();
+	DoVJoyUpdate(devices);
 }
 
 static LRESULT CALLBACK WindowProc(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -393,6 +394,9 @@ void RunDemoGui()
     font = nk_gdifont_create("Arial", 24);
     ctx = nk_gdi_init(font, dc, WINDOW_WIDTH, WINDOW_HEIGHT);
 
+	
+	InputOis_Init();
+
     while (running)
     {
         /* Input */
@@ -413,6 +417,8 @@ void RunDemoGui()
 
 		Sleep(1);
     }
+	
+	InputOis_Shutdown();
 
     nk_gdifont_del(font);
     ReleaseDC(wnd, dc);

@@ -146,7 +146,7 @@ private:
 		OisWebsocketHost& self = *(OisWebsocketHost*)connection->user_host_data;
 		
 		bool handled = false;
-		if( 0==strcmp(connection->request.uri, "/ois") )
+		if( 0==strcmp(connection->request.uri, "/input") )
 		{
 			OisWebsocketConnection* oisConnection = new OisWebsocketConnection("WebSocket", self.m_gameVersion, self.m_gameName);
 			connection->user_data = oisConnection;
@@ -190,7 +190,7 @@ private:
 		OIS_VECTOR<OisWebsocketPort::Frame>& portBuffer = oisConnection->m_port.writeBuffer;
 		for( OisWebsocketPort::Frame& f : portBuffer )
 		{
-			WebbyBeginSocketFrame( connection, WEBBY_WS_OP_TEXT_FRAME );
+			WebbyBeginSocketFrame( connection, WEBBY_WS_OP_BINARY_FRAME );
 			WebbyWrite( connection, &f.data.front(), f.data.size() );
 			WebbyEndSocketFrame( connection );
 		}

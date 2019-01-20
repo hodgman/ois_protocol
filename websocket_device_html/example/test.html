@@ -36,7 +36,7 @@ function WebSocketTest()
 		"QUIT"
 	];
 
-	ois = new OisState("ws://localhost:8081/input", "HTML test", MakeFourCC("HTML"), MakeFourCC("TEST"), commands, inputs, outputs, 0, $("#log"));
+	ois = new OisState("ws://localhost:8080/input", "HTML test", MakeFourCC("HTML"), MakeFourCC("TEST"), commands, inputs, outputs, 0, $("#log"));
 	ois.OnChanged("BTN_LED0", function(v){ led0.value = v; });
 }
       </script>
@@ -56,7 +56,7 @@ var guiCallback = function(v){ debug.innerHTML = v; }
 var ui = new UIL.Gui( { css:'top:84px; left:50%;', w:640, h:20, center:true } ).onChange( guiCallback );
 
 ui.add('title',  { name:'Test GUI'});
-ui.add('string', { name:'Host URL', value:"ws://localhost:8081/input"});
+ui.add('string', { name:'Host URL', value:"ws://localhost:8080/input"});
 ui.add('button', { name:'Connect', callback:function(){ WebSocketTest(); } });
 
 var b1 = ui.add('bool',   { name:'bool', h:20, value:false });

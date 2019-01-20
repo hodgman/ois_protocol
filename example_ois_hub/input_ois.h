@@ -12,6 +12,12 @@ void OisLog( const char* category, const char* fmt, ... );
 
 #include "../serial_host_cpp/oisdevice.h"
 
+void InputOis_Init();
+void InputOis_Update( std::vector<std::pair<OisDevice*, std::vector<const OisDevice::Event*>>>& devices );
+void InputOis_Shutdown();
+
+void InputOis_Connect(const PortName&);
+void InputOis_Disconnect(const OisDevice&);
 
 struct AppGlobals
 {
@@ -24,12 +30,6 @@ struct AppGlobals
 	std::vector<std::string> log;
 
 	std::vector<std::string> eventLog;
-	std::vector<const OisDevice::Event*> eventsThisLoop;
-	
-	float axisValues[8] = {};
-	bool buttonValues[128] = {};
-	int numButtons = 0;
-	int numAxes = 0;
 };
 
 extern AppGlobals g;
