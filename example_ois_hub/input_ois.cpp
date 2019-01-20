@@ -1,4 +1,6 @@
 
+void OisWebbyLog( const char* fmt, ... );
+#define OIS_WEBBY_INFO( fmt, ... ) OisWebbyLog(fmt, __VA_ARGS__);
 
 #define OIS_DEVICE_IMPL
 #define OIS_SERIALPORT_IMPL
@@ -85,6 +87,7 @@ private:
 	int updateCount = 0;
 };
 
+static OIS_STRING_BUILDER sb;
 static OisAllConnectionList    g_allDevices;
 static OisSerialConnectionList g_serialConnections;
 static OisWebsocketHost*       g_websockets = nullptr;
@@ -98,7 +101,7 @@ void InputOis_Init()
 
 static void UpdateDevice( OisDeviceEx& d )
 {
-	d.device->Poll(g.sb);
+	d.device->Poll(sb);
 	d.newEvents.clear();
 	d.device->PopEvents([&](const OisDevice::Event& event)
 	{
@@ -163,7 +166,17 @@ void OisLog(const char* category, const char* fmt, ...)
 	std::string str;
 	va_list	v;
 	va_start(v, fmt);
-	g.sb.FormatV(str, fmt, v);
+	sb.FormatV(str, fmt, v);
 	va_end( v );
-	g.log.push_back(str);
+	g.oisLog.push_back(str);
+}
+
+void OisWebbyLog(const char* fmt, ...)
+{
+	std::string str;
+	va_list	v;
+	va_start(v, fmt);
+	sb.FormatV(str, fmt, v);
+	va_end( v );
+	g.webbyLog.push_back(str);
 }

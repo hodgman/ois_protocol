@@ -2,6 +2,10 @@
 #error "Include oisdevice.h first!"
 #endif
 
+#ifndef OIS_WEBBY_INFO
+#define OIS_WEBBY_INFO(...) 
+#endif
+
 class OisWebsocketPort : public IOisPort
 {
 public:
@@ -135,25 +139,25 @@ private:
 	
 	static void webby_log(const char* text)
 	{
-		OIS_INFO( "Webby: %s", text);
+		OIS_WEBBY_INFO( "Webby: %s", text);
 	}
 
 	static int webby_dispatch(struct WebbyConnection *connection)
 	{
-		OIS_INFO( "[webby_dispatch] url:%s", connection->request.uri);
+		OIS_WEBBY_INFO( "[webby_dispatch] url:%s", connection->request.uri);
 		bool handled = false;
 		return handled?0:1;
 	}
 	static int webby_ws_connect(struct WebbyConnection *connection)
 	{
-		OIS_INFO( "[webby_ws_connect] method:%s", connection->request.method);
-		OIS_INFO( "[webby_ws_connect] uri:%s", connection->request.uri);
-		OIS_INFO( "[webby_ws_connect] http_version:%s", connection->request.http_version);
-		OIS_INFO( "[webby_ws_connect] query_params:%s", connection->request.query_params);
-		OIS_INFO( "[webby_ws_connect] content_length:%d", connection->request.content_length);
+		OIS_WEBBY_INFO( "[webby_ws_connect] method:%s", connection->request.method);
+		OIS_WEBBY_INFO( "[webby_ws_connect] uri:%s", connection->request.uri);
+		OIS_WEBBY_INFO( "[webby_ws_connect] http_version:%s", connection->request.http_version);
+		OIS_WEBBY_INFO( "[webby_ws_connect] query_params:%s", connection->request.query_params);
+		OIS_WEBBY_INFO( "[webby_ws_connect] content_length:%d", connection->request.content_length);
 		for( int i=0; i!=connection->request.header_count; ++i )
 		{
-			OIS_INFO( "[webby_ws_connect] header[%d]: %s = %s", i, connection->request.headers[i].name, connection->request.headers[i].value);
+			OIS_WEBBY_INFO( "[webby_ws_connect] header[%d]: %s = %s", i, connection->request.headers[i].name, connection->request.headers[i].value);
 		}
 
 		OisWebsocketHost& self = *(OisWebsocketHost*)connection->user_host_data;
@@ -170,11 +174,11 @@ private:
 	}
 	static void webby_ws_connected(struct WebbyConnection *connection)
 	{
-		OIS_INFO( "[webby_ws_connected] url:%s", connection->request.uri);
+		OIS_WEBBY_INFO( "[webby_ws_connected] url:%s", connection->request.uri);
 	}
 	static void webby_ws_closed(struct WebbyConnection *connection)
 	{
-		OIS_INFO( "[webby_ws_closed] url:%s", connection->request.uri);
+		OIS_WEBBY_INFO( "[webby_ws_closed] url:%s", connection->request.uri);
 		OisWebsocketHost& self = *(OisWebsocketHost*)connection->user_host_data;
 		OisWebsocketConnection* oisConnection = (OisWebsocketConnection*)connection->user_data;
 		self.m_connections.erase( std::find(self.m_connections.begin(), self.m_connections.end(), oisConnection) );
@@ -183,7 +187,7 @@ private:
 	}
 	static int webby_ws_frame(struct WebbyConnection *connection, const struct WebbyWsFrame *frame)
 	{
-		OIS_INFO( "[webby_ws_frame] url:%s", connection->request.uri);
+		OIS_WEBBY_INFO( "[webby_ws_frame] url:%s", connection->request.uri);
 		OisWebsocketConnection* oisConnection = (OisWebsocketConnection*)connection->user_data;
 		int size = frame->payload_length;
 		OIS_VECTOR<uint8_t> buffer;

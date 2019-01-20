@@ -51,18 +51,18 @@ int main( int argc, char *argv[] )
 #include "nuklear/nuklear.h"
 #include "nuklear/nuklear_gdi.h"
 
-void DoLogGui(struct nk_context* ctx)
+void DoLogGui(struct nk_context* ctx, std::vector<std::string>& log)
 {
 	nk_layout_row_dynamic(ctx, 30, 1);
 	if( nk_button_label(ctx, "Clear Log") )
 	{
-		g.log.clear();
+		log.clear();
 	}
 	nk_layout_row_dynamic(ctx, 200, 1);
 	if( nk_group_begin(ctx, "Log", 0) )
 	{
 		nk_layout_row_dynamic(ctx, 30, 1);
-		for( auto it = g.log.begin(); it != g.log.end(); ++it )
+		for( auto it = log.begin(); it != log.end(); ++it )
 			nk_label(ctx, it->c_str(), NK_TEXT_LEFT);
 		nk_group_end(ctx);
 	}
@@ -78,7 +78,8 @@ void DoConnectingGui(struct nk_context* ctx)
 	{
 		firstFrame = false;
 		portList.clear();
-		SerialPort::EnumerateSerialPorts(portList, g.sb, -1);
+		OIS_STRING_BUILDER sb;
+		SerialPort::EnumerateSerialPorts(portList, sb, -1);
 	}
 
 	if( portList.empty() )
@@ -320,9 +321,14 @@ void DrawGui(struct nk_context* ctx, std::vector<OisDeviceEx*>& devices)
 {
 	if (nk_begin(ctx, "Inputs", nk_rect(0, 0, (float)gdi.width/2-2, (float)gdi.height), 0))
 	{
-		if (nk_tree_push(ctx, NK_TREE_TAB, "Ois Log", NK_MAXIMIZED))
+		if (nk_tree_push(ctx, NK_TREE_TAB, "Ois Log", NK_MINIMIZED))
 		{
-			DoLogGui(ctx);
+			DoLogGui(ctx, g.oisLog);
+			nk_tree_pop(ctx);
+		}
+		if (nk_tree_push(ctx, NK_TREE_TAB, "Websocket Log", NK_MINIMIZED))
+		{
+			DoLogGui(ctx, g.webbyLog);
 			nk_tree_pop(ctx);
 		}
 		DoConnectingGui(ctx);

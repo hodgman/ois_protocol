@@ -32,8 +32,8 @@ void InputOis_Disconnect(const OisDevice&);
 
 struct AppGlobals
 {
-	OIS_STRING_BUILDER sb;
-	std::vector<std::string> log;
+	std::vector<std::string> oisLog;
+	std::vector<std::string> webbyLog;
 };
 
 extern AppGlobals g;
