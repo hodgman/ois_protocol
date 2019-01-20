@@ -4,6 +4,11 @@ function MakeFourCC( cmd )
 	return cmd.charCodeAt(0) | (cmd.charCodeAt(1)<<8) | (cmd.charCodeAt(2)<<16) | (cmd.charCodeAt(3)<<24);
 }
 
+var OisLog = Object.freeze({
+	"Out":1,
+	"In":2,
+	"Error":3
+});
 var OisType = Object.freeze({
 	"Boolean":1,
 	"Number":2,
@@ -21,27 +26,12 @@ var OisCommands = Object.freeze({
 	"ENDn":MakeFourCC("END\n")
 });
 	
-function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version, logElement)
+function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version, logFunction)
 {
 	if (!(this instanceof OisState)) 
 		return new OisState(url, deviceName, pid, vid, commands, inputs, outputs, version);
 	
-	var log = function() {};
-	if( logElement )
-	{
-		log = function(out, msg)
-		{
-			if( msg.charAt(msg.length-1) == '\n' )
-				msg = msg.substring(0, msg.length-1);
-			
-			if( out )
-				msg = "&gt; " + msg.replace(/\n/g, "<br/>&gt; ");
-			else
-				msg = "&lt; " + msg.replace(/\n/g, "<br/>&lt; ");
-			
-			logElement.append(msg + "<br/>");
-		};
-	}
+	var log = logFunction ? logFunction : function() {};
 		
 	this.wsOpen = false;
 	this.deviceState = OisDeviceState.Handshaking;
@@ -60,6 +50,7 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 		this.inputValues[key] = 0;
 	
 	var self = this;
+	var Reset;
 	
 	function CommandChannelFromIndex(idx)
 	{
@@ -91,11 +82,22 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 		return OutputChannelFromIndex( self.outputIndices.indexOf(name) );
 	};
 	
+	this.Disconnect = function()
+	{
+		if( self.ws )
+		{
+			self.ws.close();
+			clearInterval(this.intervalId);
+		}
+	}
 	this.SetOutput = function(name, value)
 	{
 		var index = OutputChannelFromName(name);
 		if( index < 0 )
+		{
+			log(OisLog.Error, name);
 			return false;
+		}
 		switch( self.outputs[name] )
 		{
 		default:
@@ -104,10 +106,10 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 			value = value!=0 ? 1 : 0;
 			break;
 		case OisType.Number:
-			value = min(32767, max(-32768, value));
+			value = Math.min(32767, Math.max(-32768, value));
 			break;
 		case OisType.Fraction:
-			value = min(32767, max(-32768, value*100));
+			value = Math.min(32767, Math.max(-32768, value*100));
 			break;
 		}
 		self.writeBuffer += index+"="+value+"\n";
@@ -132,8 +134,6 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 		return true;
 	};
 	
-	var Reset;
-	
 	function OnPoll()
 	{
 		if( self.ws.readyState != 1 )
@@ -152,7 +152,7 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 				self.lastHandshakeTime = now;
 				var msg = "SYN="+self.version+"\n";
 				self.ws.send(msg);
-				log(true, msg);
+				log(OisLog.Out, msg);
 			}
 		}
 		else if( self.deviceState == OisDeviceState.Synchronisation )
@@ -186,13 +186,13 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 				}
 			}
 			buffer += "ACT\n";
-			log(true, buffer);
+			log(OisLog.Out, buffer);
 			self.ws.send(buffer);
 			self.deviceState = OisDeviceState.Active;
 		}
 		else if( self.writeBuffer.length )
 		{
-			log(true, self.writeBuffer);
+			log(OisLog.Out, self.writeBuffer);
 			self.ws.send(self.writeBuffer);
 			self.writeBuffer = "";
 		}
@@ -207,7 +207,7 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 		var cmd = self.commandBuffer.substring(0, newlineIdx);
 		self.commandBuffer = self.commandBuffer.substring(newlineIdx+1);
 		
-		log(false, cmd);
+		log(OisLog.In, cmd);
 		
 		var fourcc = cmd.charCodeAt(0) | (cmd.charCodeAt(1)<<8) | (cmd.charCodeAt(2)<<16) | (cmd.charCodeAt(3)<<24);
 		switch( fourcc )
@@ -316,11 +316,11 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 		{ 
 			wsReader.readAsText(evt.data);
 		};
-		log(true, "Connecting to "+url);
+		log(OisLog.Out, "Connecting to "+url);
 	};
 	Reset();
 	
-	setInterval(function() {
+	this.intervalId = setInterval(function() {
 		OnPoll();
 	}, 100);
 }

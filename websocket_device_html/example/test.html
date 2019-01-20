@@ -17,6 +17,24 @@ body{ font-family:"Lucida Console", Monaco, monospace; background-color:#050608;
       <script type="text/javascript">
 var ois = false;
 var led0 = { value: 0 };
+
+var log = function(type, msg)
+{
+	var lineStart = "";
+	if( type == OisLog.Out )
+		lineStart = "&gt; ";
+	else if( type == OisLog.In )
+		lineStart = "&lt; ";
+	else if( type == OisLog.Rrror )
+		lineStart = "[!] ";
+	
+	if( msg.charAt(msg.length-1) == '\n' )
+		msg = msg.substring(0, msg.length-1);
+	msg = lineStart + msg.replace(/\n/g, "<br/>"+lineStart);
+	
+	$("#log").prepend(msg + "<br/>");
+};
+
 function WebSocketTest() 
 {
 	if( !("WebSocket" in window) ) 
@@ -36,7 +54,9 @@ function WebSocketTest()
 		"QUIT"
 	];
 
-	ois = new OisState("ws://localhost:8080/input", "HTML test", MakeFourCC("HTML"), MakeFourCC("TEST"), commands, inputs, outputs, 0, $("#log"));
+	if( ois )
+		ois.Disconnect();
+	ois = new OisState("ws://localhost:8080/input", "HTML test", MakeFourCC("HTML"), MakeFourCC("TEST"), commands, inputs, outputs, 0, log);
 	ois.OnChanged("BTN_LED0", function(v){ led0.value = v; });
 }
       </script>
@@ -77,7 +97,7 @@ group = ui.add('group', { name:'Joystick', fontColor:'#D4B87B' });
 j1 = group.add('joystick', { name:' ', w:640, multiplicator:100, precision:2, fontColor:'#D4B87B' });
 group.open();
 
-b1.onChange(function() { if( ois ) ois.SetOutput( "AXIS0", b1.value ); });
+b1.onChange(function() { if( ois ) ois.SetOutput( "BTN0", b1.value ); });
 s1.onChange(function() { if( ois ) ois.SetOutput( "AXIS0", s1.value ); });
 
 //b1.value
