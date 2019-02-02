@@ -2,6 +2,10 @@
 #error "Include oisdevice.h first!"
 #endif
 
+#ifndef OIS_VIRTUAL_PORT
+#error "OisWebsocketPort uses the IOisPort interface. Define OIS_VIRTUAL_PORT to opt in"
+#endif
+
 #ifndef OIS_WEBBY_INFO
 #define OIS_WEBBY_INFO(...) 
 #endif
@@ -192,21 +196,19 @@ private:
 R"(<!doctype html>
 <html>
 <head>
-	<meta charset = "UTF-8">
-	<title>Contents</title>
+	<meta charset="UTF-8">
+	<title>Open Interactivity System Hub</title>
 </head>
 <body>
 <div id="container">
-	<h1>Contents</h1>
+	<h1>Available Controllers</h1>
 	<ul>
 )";
 			const char* htmlFoot =
-R"(
-	</ul>
+R"(	</ul>
 </div>
 </body>
-</html>
-)";
+</html>)";
 			WebbyWrite(connection, htmlHead, strlen(htmlHead));
 			for (unsigned i = 0, end = self.m_numFiles; i != end; ++i)
 			{
@@ -216,7 +218,7 @@ R"(
 				size_t len = strlen(f.path);
 				if (len > 5 && 0 == strcmp(f.path + len - 5, ".html"))
 				{
-					const char* name = f.path;// strrchr(f.path, '/');
+					const char* name = f.path;
 					const char* htmlLine = sb.FormatTemp(
 R"(	<li><a href="%s">%s</a></li>
 )", f.request, name);

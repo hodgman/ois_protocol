@@ -84,7 +84,7 @@ namespace OisDeviceInternal
 	template<unsigned N> struct Sizer { char elems[N]; };
 	template<class Type, unsigned N> Sizer<N> ArraySize_( Type(&)[N] );
 }
-#define OIS_ARRAYSIZE( a ) sizeof( OisDeviceInternal::ArraySize_( a ).elems )
+# define OIS_ARRAYSIZE( a ) sizeof( OisDeviceInternal::ArraySize_( a ).elems )
 #endif
 
 #ifndef OIS_MIN
@@ -92,7 +92,7 @@ namespace OisDeviceInternal
 {
 	template<class T> T Min( T a, T b ) { return a<b ? a : b; }
 }
-#define OIS_MIN OisDeviceInternal::Min
+# define OIS_MIN OisDeviceInternal::Min
 #endif
 
 
@@ -114,7 +114,7 @@ typedef OIS_VECTOR<PortName> OIS_PORT_LIST;
 #endif
 
 #ifndef OIS_FOURCC
-#define OIS_FOURCC(str)                                                          \
+# define OIS_FOURCC(str)                                                         \
 	((uint32_t)(uint8_t)(str[0])        | ((uint32_t)(uint8_t)(str[1]) << 8) |   \
 	((uint32_t)(uint8_t)(str[2]) << 16) | ((uint32_t)(uint8_t)(str[3]) << 24 ))  //
 #endif
@@ -136,7 +136,7 @@ public:
 	virtual const char* Name() { return ""; }
 };
 
-#ifdef OIS_SERIALPORT_INCLUDED
+# ifdef OIS_SERIALPORT_INCLUDED
 class OisPortSerial : public IOisPort
 {
 public:
@@ -170,7 +170,7 @@ public:
 private:
 	SerialPort m_port;
 };
-#endif
+# endif
 #endif
 
 
@@ -201,7 +201,6 @@ public:
 		uint16_t channel;
 		OIS_STRING name;
 	};
-
 protected:
 	enum ClientCommandsAscii
 	{
@@ -272,6 +271,9 @@ protected:
 	};
 	typedef uint32_t DeviceStateMask;
 
+	static uint16_t ToRawValue(NumericType type, Value value);
+	static Value FromRawValue(NumericType type, uint16_t value);
+	static int PackNumericValueCommand(const NumericValue& v, uint8_t cmd[5], unsigned PAYLOAD_SHIFT, unsigned VAL_1, unsigned VAL_2, unsigned VAL_3, unsigned VAL_4);
 	static int CmdStrLength(const char* c, const char* end, char terminator);
 	static char* ZeroDelimiter(char* str, char delimiter);
 	template<class T> static T Clamp(T x, T min, T max) { return x < min ? min : (x > max ? max : x); }
@@ -287,6 +289,7 @@ public:
 	void ProcessCommands();
 	void SendData(const char* cmd, int length);
 	void SendText(const char* cmd);
+	void ConnectAndPoll();
 	bool ExpectState(DeviceStateMask state, const char* cmd, unsigned version);
 	void _ClearState()                                    { return static_cast<CRTP*>(this)->ClearState(); }
 	bool _ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb) { return static_cast<CRTP*>(this)->ProcessAscii(cmd, sb); }
@@ -481,6 +484,24 @@ void OisBase<T>::ProcessCommands()
 }
 
 template<class T>
+void OisBase<T>::ConnectAndPoll()
+{
+	if (!m_port.IsConnected())
+	{
+		if (m_connectionState != Handshaking)
+			ClearState();
+		m_port.Connect();
+		return;
+	}
+	for (;; )
+	{
+		if (!ReadCommands())
+			break;
+		ProcessCommands();
+	}
+}
+
+template<class T>
 bool OisBase<T>::ExpectState(DeviceStateMask state, const char* cmd, unsigned version)
 {
 	if (m_protocolVersion < version)
@@ -540,84 +561,95 @@ int OisState::CmdStrLength(const char* c, const char* end, char terminator)
 	return length + (foundNull ? 0 : OIS_MAX_COMMAND_LENGTH * 2);
 }
 
+uint16_t OisState::ToRawValue(NumericType type, Value value)
+{
+	switch (type)
+	{
+	default: OIS_ASSERT(false);
+	case Boolean:  return value.boolean ? 1 : 0;
+	case Number:   return (int16_t)Clamp(value.number, -32768, 32767);
+	case Fraction: return (int16_t)Clamp((int)(value.fraction*100.0f), -32768, 32767);
+	}
+}
+
+OisState::Value OisState::FromRawValue(NumericType type, uint16_t value)
+{
+	Value v;
+	switch (type)
+	{
+	default: OIS_ASSERT(false);
+	case Boolean:  v.boolean = !!value;        break;
+	case Number:   v.number = value;          break;
+	case Fraction: v.fraction = value / 100.0f; break;
+	}
+	return v;
+}
+
+int OisState::PackNumericValueCommand(const NumericValue& v, uint8_t cmd[5], unsigned PAYLOAD_SHIFT, unsigned VAL_1, unsigned VAL_2, unsigned VAL_3, unsigned VAL_4)
+{
+	int cmdLength;
+	int16_t data = ToRawValue(v.type, v.value);
+	uint16_t u = (uint16_t)data;
+	const unsigned extraBits = 8 - PAYLOAD_SHIFT;
+	const unsigned valueLimit1 = 1U << extraBits;
+	const unsigned valueLimit2 = 1U << (8 + extraBits);
+	const unsigned channelLimit3 = 1U << (8 + extraBits);
+	if (v.channel < 256 && u < valueLimit1)
+	{
+		cmd[0] = (uint8_t)(0xFF & (VAL_1 | (u << PAYLOAD_SHIFT)));
+		cmd[1] = (uint8_t)(0xFF & v.channel);
+		cmdLength = 2;
+	}
+	else if (v.channel < 256 && u < valueLimit2)
+	{
+		cmd[0] = (uint8_t)(0xFF & (VAL_2 | ((u >> 8) << PAYLOAD_SHIFT)));
+		cmd[1] = (uint8_t)(0xFF & u);
+		cmd[2] = (uint8_t)(0xFF & v.channel);
+		cmdLength = 3;
+	}
+	else if (v.channel < channelLimit3)
+	{
+		cmd[0] = (uint8_t)(0xFF & (VAL_3 | ((v.channel >> 8) << PAYLOAD_SHIFT)));
+		cmd[1] = (uint8_t)(0xFF & u);
+		cmd[2] = (uint8_t)(0xFF & (u >> 8));
+		cmd[3] = (uint8_t)(0xFF & v.channel);
+		cmdLength = 4;
+	}
+	else
+	{
+		cmd[0] = (uint8_t)VAL_4;
+		cmd[1] = (uint8_t)(0xFF & u);
+		cmd[2] = (uint8_t)(0xFF & (u >> 8));
+		cmd[3] = (uint8_t)(0xFF & v.channel);
+		cmd[4] = (uint8_t)(0xFF & (v.channel >> 8));
+		cmdLength = 5;
+	}
+	return cmdLength;
+}
+
 void OisDevice::Poll(OIS_STRING_BUILDER& sb)
 {
-	if( !m_port.IsConnected() )
-	{
-		if( m_connectionState != Handshaking )
-			ClearState();
-		m_port.Connect();
-		return;
-	}
-	for( ;; )
-	{
-		if( !ReadCommands() )
-			break;
-		ProcessCommands();
-	}
+	ConnectAndPoll();
 	for( int index : m_queuedInputs )
 	{
 		const NumericValue& v = m_numericInputs[index];
-		int16_t data = 0;
 		switch( v.type )
 		{
-		default: OIS_ASSERT( false );
-		case Boolean:
-			data = v.value.boolean ? 1 : 0;
-			OIS_INFO( "-> %d(%s) = %s", v.channel, v.name.c_str(), v.value.boolean ? "true" : "false" );
-			break;
-		case Number:
-			data = (int16_t)Clamp(v.value.number, -32768, 32767);
-			OIS_INFO( "-> %d(%s) = %d", v.channel, v.name.c_str(), v.value.number );
-			break;
-		case Fraction:
-			data = (int16_t)Clamp((int)(v.value.fraction*100.0f), -32768, 32767);
-			OIS_INFO( "-> %d(%s) = %.2f", v.channel, v.name.c_str(), v.value.fraction );
-			break;
+		case Boolean:  OIS_INFO( "-> %d(%s) = %s",   v.channel, v.name.c_str(), v.value.boolean ? "true" : "false" ); break;
+		case Number:   OIS_INFO( "-> %d(%s) = %d",   v.channel, v.name.c_str(), v.value.number );                     break;
+		case Fraction: OIS_INFO( "-> %d(%s) = %.2f", v.channel, v.name.c_str(), v.value.fraction );                   break;
 		}
 		if( m_binary )
 		{
 			uint8_t cmd[5];
-			int cmdLength = 0;
-			uint16_t u = (uint16_t)data;
-			const unsigned extraBits = 8 - SV_PAYLOAD_SHIFT;
-			const unsigned valueLimit1   = 1U<<extraBits;
-			const unsigned valueLimit2   = 1U<<(8+extraBits);
-			const unsigned channelLimit3 = 1U<<(8+extraBits);
-			if( v.channel < 256 && u < valueLimit1 )
-			{
-				cmd[0] = (uint8_t)(0xFF & (SV_VAL_1 | (u << SV_PAYLOAD_SHIFT)));
-				cmd[1] = (uint8_t)(0xFF & v.channel);
-				cmdLength = 2;
-			}
-			else if( v.channel < 256 && u < valueLimit2 )
-			{
-				cmd[0] = (uint8_t)(0xFF & (SV_VAL_2 | ((u>>8) << SV_PAYLOAD_SHIFT)));
-				cmd[1] = (uint8_t)(0xFF & u);
-				cmd[2] = (uint8_t)(0xFF & v.channel);
-				cmdLength = 3;
-			}
-			else if( v.channel < channelLimit3 )
-			{
-				cmd[0] = (uint8_t)(0xFF & (SV_VAL_3 | ((v.channel>>8) << SV_PAYLOAD_SHIFT)));
-				cmd[1] = (uint8_t)(0xFF &  u);
-				cmd[2] = (uint8_t)(0xFF & (u>>8));
-				cmd[3] = (uint8_t)(0xFF & v.channel);
-				cmdLength = 4;
-			}
-			else
-			{
-				cmd[0] = (uint8_t)SV_VAL_4;
-				cmd[1] = (uint8_t)(0xFF &  u);
-				cmd[2] = (uint8_t)(0xFF & (u>>8));
-				cmd[3] = (uint8_t)(0xFF &  v.channel);
-				cmd[4] = (uint8_t)(0xFF & (v.channel>>8));
-				cmdLength = 5;
-			}
+			int cmdLength = PackNumericValueCommand(v, cmd, SV_PAYLOAD_SHIFT, SV_VAL_1, SV_VAL_2, SV_VAL_3, SV_VAL_4);
 			SendData((char*)cmd, cmdLength);
 		}
 		else
+		{
+			int16_t data = ToRawValue(v.type, v.value);
 			SendText(sb.FormatTemp("%d=%d\n", v.channel, data));
+		}
 	}
 	m_queuedInputs.clear();
 }
@@ -796,18 +828,12 @@ int OisDevice::ProcessBinary(char* start, char* end)
 			NumericValue* v = FindChannel(m_numericOutputs, channel);
 			if( v )
 			{
+				v->value = FromRawValue(v->type, value);
 				switch( v->type )
 				{
-				default: OIS_ASSERT( false );
-				case Boolean:  v->value.boolean = !!value; 
-					OIS_INFO( "<- %d(%s) = %s", channel, v->name.c_str(), v->value.boolean ? "true" : "false" );
-					break;
-				case Number:   v->value.number = value; 
-					OIS_INFO( "<- %d(%s) = %d", channel, v->name.c_str(), v->value.number );
-					break;
-				case Fraction: v->value.fraction = value/100.0f;
-					OIS_INFO( "<- %d(%s) = %.2f", channel, v->name.c_str(), v->value.fraction );
-					break;
+				case Boolean:  OIS_INFO( "<- %d(%s) = %s", channel, v->name.c_str(), v->value.boolean ? "true" : "false" ); break;
+				case Number:   OIS_INFO( "<- %d(%s) = %d", channel, v->name.c_str(), v->value.number );                     break;
+				case Fraction: OIS_INFO( "<- %d(%s) = %.2f", channel, v->name.c_str(), v->value.fraction );                 break;
 				}
 			}
 			else
@@ -844,18 +870,12 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 		NumericValue* v = FindChannel(m_numericOutputs, channel);
 		if( v )
 		{
+			v->value = FromRawValue(v->type, atoi(payload));
 			switch( v->type )
 			{
-			default: OIS_ASSERT( false );
-			case Boolean:  v->value.boolean = !!atoi(payload); 
-				OIS_INFO( "<- %d(%s) = %s", channel, v->name.c_str(), v->value.boolean ? "true" : "false" );
-				break;
-			case Number:   v->value.number = atoi(payload); 
-				OIS_INFO( "<- %d(%s) = %d", channel, v->name.c_str(), v->value.number );
-				break;
-			case Fraction: v->value.fraction = atoi(payload)/100.0f;
-				OIS_INFO( "<- %d(%s) = %.2f", channel, v->name.c_str(), v->value.fraction );
-				break;
+			case Boolean:  OIS_INFO( "<- %d(%s) = %s",   channel, v->name.c_str(), v->value.boolean ? "true" : "false" ); break;
+			case Number:   OIS_INFO( "<- %d(%s) = %d",   channel, v->name.c_str(), v->value.number );                     break;
+			case Fraction: OIS_INFO( "<- %d(%s) = %.2f", channel, v->name.c_str(), v->value.fraction );                   break;
 			}
 		}
 		else
