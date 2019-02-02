@@ -1,45 +1,97 @@
 ﻿#ifndef OIS_DEVICE_INCLUDED
 #define OIS_DEVICE_INCLUDED
 
+
+//------------------------------------------------------------------------------
+// The OIS protocol does not set a maximum length on the ASCII names of channels.
+// However, the implementation needs to define a fixed sized command buffer for practical reasons.
+// A sensible default size is chosen here, but you can override it by defining OIS_MAX_NAME_LENGTH.
+#ifndef OIS_MAX_NAME_LENGTH
+const static unsigned OIS_MAX_NAME_LENGTH = 120;
+#endif
+
+//------------------------------------------------------------------------------
+// The internal command buffer size can be overridden by defining OIS_MAX_COMMAND_LENGTH.
+#ifndef OIS_MAX_COMMAND_LENGTH //              NIF= 65535, VERY_LONG_ASCII_NAME \0
+const static unsigned OIS_MAX_COMMAND_LENGTH = 4    +6     +OIS_MAX_NAME_LENGTH +1;
+#endif
+
+//------------------------------------------------------------------------------
+// If you have your own logging mechanism, define OIS_INFO to pipe informational messages to your log.
 #ifndef OIS_INFO
 #define OIS_INFO( fmt, ... ) do{}while(0)
 #endif
 
+//------------------------------------------------------------------------------
+// If you have your own logging mechanism, define OIS_WARN to pipe behavior warning messages to your log.
 #ifndef OIS_WARN
-#define OIS_WARN( fmt, ... ) do{}while(0)
+# ifdef _DEBUG
+#  include <cstdio>
+#  define OIS_WARN( fmt, ... ) printf( fmt, __VA_ARGS__ )
+# else
+#  define OIS_WARN( fmt, ... ) do{}while(0)
+# endif
 #endif
 
+//------------------------------------------------------------------------------
+// Define OIS_ENABLE_ERROR_LOGGING as 1 to get fully verbose error reporting.
 #ifndef OIS_ENABLE_ERROR_LOGGING
-#define OIS_ENABLE_ERROR_LOGGING 0
+# ifdef _DEBUG
+#  define OIS_ENABLE_ERROR_LOGGING 1
+# else
+#  define OIS_ENABLE_ERROR_LOGGING 0
+# endif
 #endif
 
+//------------------------------------------------------------------------------
+// If you want use use your own assert implementation, define OIS_ASSERT as appropriate.
 #ifndef OIS_ASSERT
-#define OIS_ASSERT( condition ) do{}while(0)
+# ifdef _DEBUG
+#  include <cassert>
+#  define OIS_ASSERT( condition ) assert(condition)
+# else
+#  define OIS_ASSERT( condition ) do{}while(0)
+# endif
 #endif
 
+//------------------------------------------------------------------------------
+// Like assert, but can hint unreachable code blocks if your compiler supports such hints.
 #ifndef OIS_ASSUME
-#define OIS_ASSUME( condition )
+# define OIS_ASSUME( condition ) OIS_ASSERT(condition)
 #endif
 
+//------------------------------------------------------------------------------
+// If your compiler doesn't supply stdint.h, define OIS_NO_STDINT and include your own implementation.
 #ifndef OIS_NO_STDINT
-#include <stdint.h>
+# include <cstdint>
 #endif 
 
+//------------------------------------------------------------------------------
+// If you want use use your own dynamic array class, define OIS_VECTOR to your own class.
 #ifndef OIS_VECTOR
-#include <vector>
-#define OIS_VECTOR std::vector
+# include <vector>
+# define OIS_VECTOR std::vector
 #endif
 
+//------------------------------------------------------------------------------
+// If you want use use your own string class, define OIS_STRING to your own class.
 #ifndef OIS_STRING
-#include <string>
-#define OIS_STRING std::string
+# include <string>
+# define OIS_STRING std::string
 #endif
 
+//------------------------------------------------------------------------------
+// If you want use use your own string builder, define OIS_STRING_BUILDER to your own class that implements the interface below.
+// FormatTemp, AllocTemp use char-buffers that are owned by the OIS_STRING_BUILDER object:
+//   The lifetime of these allocations is as long as this OIS_STRING_BUILDER object, 
+//   or until the next "Temp" operation on this OIS_STRING_BUILDER object (whichever is shorter).
+// Format, FormatV, StoreTemp use char-buffers that are owned by the first argument.
+//------------------------------------------------------------------------------
 #ifndef OIS_STRING_BUILDER
-#include <stdarg.h>
+# include <stdarg.h>
 struct OIS_STRING_BUILDER
 {
-	const char* FormatTemp(const char* fmt, ...)
+	const char* FormatTemp(const char* fmt, ...)//Format a string using the "temp" lifetime.
 	{
 		va_list	v;
 		va_start(v, fmt);
@@ -47,7 +99,7 @@ struct OIS_STRING_BUILDER
 		va_end( v );
 		return s;
 	}
-	const char* Format(OIS_STRING& result, const char* fmt, ...)
+	const char* Format(OIS_STRING& result, const char* fmt, ...)//Format a string using a user-controlled lifetime.
 	{
 		va_list	v;
 		va_start(v, fmt);
@@ -55,7 +107,7 @@ struct OIS_STRING_BUILDER
 		va_end( v );
 		return s;
 	}
-	const char* FormatV(OIS_STRING& result, const char* fmt, const va_list& v)
+	const char* FormatV(OIS_STRING& result, const char* fmt, const va_list& v)//Format a string using a user-controlled lifetime.
 	{
 		int length = _vscprintf( fmt, v ) + 1;
 		result.resize(length);
@@ -64,12 +116,12 @@ struct OIS_STRING_BUILDER
 		result.resize(length-1);//don't keep the \0 terminator as part of the std::string data
 		return buffer;
 	}
-	char* AllocTemp(unsigned bytes)
+	char* AllocTemp(unsigned bytes)//allocate N bytes using the "temp" lifetime.
 	{
 		temp.resize(bytes);
 		return &temp[0];
 	}
-	void StoreTemp(OIS_STRING& result, const char* buffer)
+	void StoreTemp(OIS_STRING& result, const char* buffer)//buffer is a value that was returned from AllocTemp
 	{
 		result = buffer;
 	}
@@ -78,32 +130,10 @@ private:
 };
 #endif
 
-#ifndef OIS_ARRAYSIZE
-namespace OisDeviceInternal
-{
-	template<unsigned N> struct Sizer { char elems[N]; };
-	template<class Type, unsigned N> Sizer<N> ArraySize_( Type(&)[N] );
-}
-# define OIS_ARRAYSIZE( a ) sizeof( OisDeviceInternal::ArraySize_( a ).elems )
-#endif
-
-#ifndef OIS_MIN
-namespace OisDeviceInternal
-{
-	template<class T> T Min( T a, T b ) { return a<b ? a : b; }
-}
-# define OIS_MIN OisDeviceInternal::Min
-#endif
-
-
-struct PortName
-{
-	uint32_t id;
-	OIS_STRING path;
-	OIS_STRING name;
-};
-typedef OIS_VECTOR<PortName> OIS_PORT_LIST;
-
+//------------------------------------------------------------------------------
+// If you want to use your own communication method, define OIS_PORT to your own class.
+// If not defined, we will include the bundled SerialPort class.
+//------------------------------------------------------------------------------
 #ifndef OIS_PORT
 # include "serialport.hpp"
 # ifdef OIS_VIRTUAL_PORT
@@ -113,16 +143,11 @@ typedef OIS_VECTOR<PortName> OIS_PORT_LIST;
 # endif
 #endif
 
-#ifndef OIS_FOURCC
-# define OIS_FOURCC(str)                                                         \
-	((uint32_t)(uint8_t)(str[0])        | ((uint32_t)(uint8_t)(str[1]) << 8) |   \
-	((uint32_t)(uint8_t)(str[2]) << 16) | ((uint32_t)(uint8_t)(str[3]) << 24 ))  //
-#endif
 
-#ifndef OIS_MAX_COMMAND_LENGTH
-const static unsigned OIS_MAX_COMMAND_LENGTH = 128;
-#endif
 
+//------------------------------------------------------------------------------
+// If you want to use multiple different communication methods, defining OIS_VIRTUAL_PORT will enable dynamic dispatch for communication functions.
+// If the bundled SerialPort class was included, the OisPortSerial class is an adaptor to make SerialPort implement the IOisPort interface. 
 #ifdef OIS_VIRTUAL_PORT
 class IOisPort
 {
@@ -143,30 +168,12 @@ public:
 	OisPortSerial(const char* portName)
 		: m_port(portName)
 	{}
-	bool IsConnected()
-	{
-		return m_port.IsConnected();
-	}
-	void Connect()
-	{
-		m_port.Connect();
-	}
-	void Disconnect()
-	{
-		m_port.Disconnect();
-	}
-	int Read(char* buffer, int size)
-	{
-		return m_port.Read(buffer, size);
-	}
-	bool Write(const char* buffer, int size)
-	{
-		return m_port.Write(buffer, size);
-	}
-	virtual const char* Name()
-	{
-		return m_port.PortName().c_str();
-	}
+	bool IsConnected()                       { return m_port.IsConnected(); }
+	void Connect()                           { return m_port.Connect(); }
+	void Disconnect()                        { return m_port.Disconnect(); }
+	int Read(char* buffer, int size)         { return m_port.Read(buffer, size); }
+	bool Write(const char* buffer, int size) { return m_port.Write(buffer, size); }
+	virtual const char* Name()               { return m_port.PortName().c_str(); }
 private:
 	SerialPort m_port;
 };
@@ -174,6 +181,28 @@ private:
 #endif
 
 
+//------------------------------------------------------------------------------
+// Generic utilities: Length of fixed C arrays
+#ifndef OIS_ARRAYSIZE
+namespace OisDeviceInternal
+{
+	template<unsigned N> struct Sizer { char elems[N]; };
+	template<class Type, unsigned N> Sizer<N> ArraySize_(Type(&)[N]);
+}
+# define OIS_ARRAYSIZE( a ) sizeof( OisDeviceInternal::ArraySize_( a ).elems )
+#endif
+
+//------------------------------------------------------------------------------
+// Generic utilities: uint32_t FOURCC code from a 4-character string
+#ifndef OIS_FOURCC
+# define OIS_FOURCC(str)                                                         \
+	((uint32_t)(uint8_t)(str[0])        | ((uint32_t)(uint8_t)(str[1]) << 8) |   \
+	((uint32_t)(uint8_t)(str[2]) << 16) | ((uint32_t)(uint8_t)(str[3]) << 24 ))  //
+#endif
+
+
+//------------------------------------------------------------------------------
+// Shared structures / utilities between host and device
 class OisState
 {
 public:
@@ -281,10 +310,11 @@ protected:
 };
 
 
-template<class CRTP>
-class OisBase : protected OisState
+//------------------------------------------------------------------------------
+// Shared internal data / logic between device and host. Uses compile-time polymorphism.
+template<class CRTP> class OisBase : protected OisState
 {
-public:
+protected:
 	bool ReadCommands();
 	void ProcessCommands();
 	void SendData(const char* cmd, int length);
@@ -332,6 +362,7 @@ public:
 	}
 };
 
+//------------------------------------------------------------------------------
 //Use this class on the host to talk to a device
 class OisDevice : private OisBase<OisDevice>
 {
@@ -353,7 +384,7 @@ public:
 	const OIS_VECTOR<Event>&        DeviceEvents()  const { return m_events; }
 
 	template<class T>
-	bool PopEvents(T& fn);
+	bool PopEvents(T& fn);//calls fn(const Event&)
 
 	void SetInput(const NumericValue& input, Value value);
 private:
@@ -367,6 +398,7 @@ private:
 	OIS_VECTOR<uint16_t> m_eventBuffer;
 };
 
+//------------------------------------------------------------------------------
 //Use this class on the device to talk to a host
 class OisHost : private OisBase<OisHost>
 {
@@ -387,22 +419,20 @@ public:
 	const OIS_VECTOR<NumericValue>& DeviceOutputs() const { return m_numericOutputs; }
 	const OIS_VECTOR<Event>&        DeviceEvents()  const { return m_events; }
 
-	template<class T>
-	bool PopEvents(T& fn);
-
-	void SetInput(const NumericValue& input, Value value);
+	void Activate(const Event&);
+	void SetOutput(const NumericValue& input, Value value);
 private:
 	friend class OisBase<OisHost>;
 	void ClearState();
 	bool ProcessAscii(char* cmd, OIS_STRING_BUILDER&);
 	int  ProcessBinary(char* start, char* end);
 
-	OIS_STRING           m_deviceNameOverride;
-	OIS_VECTOR<uint16_t> m_queuedInputs;
+	OIS_VECTOR<uint16_t> m_queuedOutputs;
 	OIS_VECTOR<uint16_t> m_eventBuffer;
 };
 
 
+//------------------------------------------------------------------------------
 
 template<class T> typename T::value_type* OisState::FindChannel(T& values, int channel)
 {
@@ -411,6 +441,8 @@ template<class T> typename T::value_type* OisState::FindChannel(T& values, int c
 			return &v;
 	return nullptr;
 }
+
+//------------------------------------------------------------------------------
 
 template<class T>
 void OisBase<T>::SendData(const char* cmd, int length)
@@ -489,11 +521,11 @@ void OisBase<T>::ConnectAndPoll()
 	if (!m_port.IsConnected())
 	{
 		if (m_connectionState != Handshaking)
-			ClearState();
+			_ClearState();
 		m_port.Connect();
 		return;
 	}
-	for (;; )
+	for (;;)
 	{
 		if (!ReadCommands())
 			break;
@@ -520,6 +552,7 @@ bool OisBase<T>::ExpectState(DeviceStateMask state, const char* cmd, unsigned ve
 	return true;
 }
 
+//------------------------------------------------------------------------------
 
 template<class T>
 bool OisDevice::PopEvents(T& fn)
@@ -536,7 +569,9 @@ bool OisDevice::PopEvents(T& fn)
 	return true;
 }
 
+//------------------------------------------------------------------------------
 #ifdef OIS_DEVICE_IMPL
+//------------------------------------------------------------------------------
 
 char* OisState::ZeroDelimiter(char* str, char delimiter)
 {
@@ -626,6 +661,8 @@ int OisState::PackNumericValueCommand(const NumericValue& v, uint8_t cmd[5], uns
 	}
 	return cmdLength;
 }
+
+//------------------------------------------------------------------------------
 
 void OisDevice::Poll(OIS_STRING_BUILDER& sb)
 {
@@ -1042,6 +1079,9 @@ void OisDevice::ClearState()
 	m_events.clear();
 	m_eventBuffer.clear();
 }
+
+//------------------------------------------------------------------------------
 #endif // OIS_DEVICE_IMPL
+//------------------------------------------------------------------------------
 
 #endif // OIS_DEVICE_INCLUDED

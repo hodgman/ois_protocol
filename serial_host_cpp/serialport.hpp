@@ -1,6 +1,14 @@
 #ifndef OIS_SERIALPORT_INCLUDED
 #define OIS_SERIALPORT_INCLUDED
 
+struct PortName
+{
+	uint32_t id;
+	OIS_STRING path;
+	OIS_STRING name;
+};
+typedef OIS_VECTOR<PortName> OIS_PORT_LIST;
+
 class SerialPort
 {
 public:
@@ -283,6 +291,7 @@ void SerialPort::PurgeReadBuffer()
 	if( m_handle != INVALID_HANDLE_VALUE )
 		PurgeComm(m_handle, PURGE_RXCLEAR);
 }
+
 int SerialPort::Read(char* buffer, int bufferSize)
 {
 	if( m_handle == INVALID_HANDLE_VALUE || bufferSize <= 0 )
@@ -295,7 +304,7 @@ int SerialPort::Read(char* buffer, int bufferSize)
 		return 0;
 	}
 
-	DWORD toRead = OIS_MIN(status.cbInQue, (DWORD)bufferSize);
+	DWORD toRead = status.cbInQue < (DWORD)bufferSize ? status.cbInQue : (DWORD)bufferSize;
 	DWORD bytesRead;
 	if( ReadFile(m_handle, buffer, toRead, &bytesRead, NULL) )
 		return bytesRead;
