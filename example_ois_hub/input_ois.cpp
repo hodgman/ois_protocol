@@ -25,6 +25,7 @@ public:
 class OisSerialConnectionList
 {
 public:
+	OisSerialConnectionList() {}
 	~OisSerialConnectionList() { Clear(); }
 	void Clear()
 	{
@@ -41,6 +42,9 @@ public:
 			return &item->m_device == &d;
 		});
 	}
+private:
+	OisSerialConnectionList(const OisSerialConnectionList&);
+	OisSerialConnectionList& operator=(const OisSerialConnectionList&);
 };
 
 class OisAllConnectionList
@@ -90,13 +94,20 @@ private:
 static OIS_STRING_BUILDER sb;
 static OisAllConnectionList    g_allDevices;
 static OisSerialConnectionList g_serialConnections;
-static OisWebsocketHost*       g_websockets = nullptr;
+static OisWebHost*             g_websockets = nullptr;
 AppGlobals g;
+
+static OisWebWhitelist g_webFiles[] =
+{
+	{ "/ois_protocol.js", "../websocket_device_html/ois_protocol.js" },
+	{ "/example/",        "../websocket_device_html/example/index.html" },
+	{ "/example/",        "../websocket_device_html/", true },
+};
 
 void InputOis_Init()
 {
 	delete g_websockets;
-	g_websockets = new OisWebsocketHost(GAME_VERSION, GAME_NAME, 8080);
+	g_websockets = new OisWebHost(GAME_VERSION, GAME_NAME, g_webFiles, true, 8080);
 }
 
 static void UpdateDevice( OisDeviceEx& d )

@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ois2vjoy", "ois2vjoy.vcxproj", "{43D954AB-5056-41CB-8C5E-35CD35FFF967}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ois_hub", "ois_hub.vcxproj", "{43D954AB-5056-41CB-8C5E-35CD35FFF967}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

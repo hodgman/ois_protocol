@@ -76,12 +76,23 @@ public:
 
 #include "webby/webby.h"
 
-class OisWebsocketHost
+struct OisWebWhitelist
+{
+	const char* request;
+	const char* path;
+	bool isPattern;
+};
+
+class OisWebHost
 {
 public:
-	OisWebsocketHost(unsigned gameVersion, const char* gameName, unsigned short port = 8080)
+	template<unsigned N>
+	OisWebHost(unsigned gameVersion, const char* gameName, const OisWebWhitelist(&files)[N], bool allowIndex, unsigned short port = 8080)
 		: m_gameName(gameName)
 		, m_gameVersion(gameVersion)
+		, m_files(files)
+		, m_numFiles(N)
+		, m_allowIndex(allowIndex)
 	{
 		WORD wsa_version = MAKEWORD(2, 2);
 		WSADATA wsa_data;
@@ -111,7 +122,7 @@ public:
 		m_memory.resize(size);
 		m_webby = WebbyServerInit( &config, &m_memory.front(), size );
 	}
-	~OisWebsocketHost()
+	~OisWebHost()
 	{
 		WSACleanup();
 	}
@@ -133,13 +144,17 @@ public:
 			return false;
 		
 		(*it)->abort = true;
+		return true;
 	}
 private:
 	OIS_VECTOR<OisWebsocketConnection*> m_connections;
 	OIS_VECTOR<char> m_memory;
 	WebbyServer* m_webby = nullptr;
+	const OisWebWhitelist* m_files = nullptr;
+	unsigned m_numFiles = 0;
 	const char* m_gameName;
 	unsigned m_gameVersion;
+	bool m_allowIndex;
 	
 	static void webby_log(const char* text)
 	{
@@ -148,38 +163,94 @@ private:
 
 	static int webby_dispatch(struct WebbyConnection* connection)
 	{
-	//todo - move into example app?
+		OisWebHost& self = *(OisWebHost*)connection->user_host_data;
+		if (!self.m_numFiles)
+			return 1;
+
 		const char* uri = connection->request.uri;
 		OIS_WEBBY_INFO( "[webby_dispatch] url:%s", uri);
+
 		OIS_STRING_BUILDER sb;
-		const char* path = "";
-		if( 0==strcmp(uri, "/") )
-			path = "../websocket_device_html/example/test.html";
-		else if( 0==strcmp(uri, "/ois_protocol.js") )
-			path = "../websocket_device_html/ois_protocol.js";
-		else 
-			path = sb.FormatTemp("../websocket_device_html/example%s", uri);
-		FILE* fp = fopen(path, "rb");
-		if( fp )
+		const char* whitelistedPath = 0;
+		for (unsigned i = 0, end = self.m_numFiles; i != end && !whitelistedPath; ++i)
 		{
-			fseek(fp, 0L, SEEK_END);
-			long size = ftell(fp);
-			rewind(fp);
-			if( 0 == WebbyBeginResponse(connection, 200, size, 0, 0) )
+			const OisWebWhitelist& f = self.m_files[i];
+			if (f.isPattern)
 			{
+				if (0 == strncmp(uri, f.request, strlen(f.request)))
+					whitelistedPath = sb.FormatTemp("%s%s", f.path, uri);
+			}
+			else if (0 == strcmp(uri, f.request))
+					whitelistedPath = f.path;
+		}
+
+		if (!whitelistedPath && self.m_allowIndex && 0 == strcmp(uri, "/"))
+		{
+			if (WebbyBeginResponse(connection, 200, -1, 0, 0))
+				return -1;
+			const char* htmlHead =
+R"(<!doctype html>
+<html>
+<head>
+	<meta charset = "UTF-8">
+	<title>Contents</title>
+</head>
+<body>
+<div id="container">
+	<h1>Contents</h1>
+	<ul>
+)";
+			const char* htmlFoot =
+R"(
+	</ul>
+</div>
+</body>
+</html>
+)";
+			WebbyWrite(connection, htmlHead, strlen(htmlHead));
+			for (unsigned i = 0, end = self.m_numFiles; i != end; ++i)
+			{
+				const OisWebWhitelist& f = self.m_files[i];
+				if (f.isPattern)
+					continue;
+				size_t len = strlen(f.path);
+				if (len > 5 && 0 == strcmp(f.path + len - 5, ".html"))
+				{
+					const char* name = f.path;// strrchr(f.path, '/');
+					const char* htmlLine = sb.FormatTemp(
+R"(	<li><a href="%s">%s</a></li>
+)", f.request, name);
+					WebbyWrite(connection, htmlLine, strlen(htmlLine));
+				}
+			}
+			WebbyWrite(connection, htmlFoot, strlen(htmlFoot));
+			WebbyEndResponse(connection);
+		}
+		else
+		{
+			FILE* fp;
+			if (whitelistedPath && (fp = fopen(whitelistedPath, "rb")))
+			{
+				fseek(fp, 0L, SEEK_END);
+				long size = ftell(fp);
+				rewind(fp);
+				if (WebbyBeginResponse(connection, 200, size, 0, 0))
+				{
+					fclose(fp);
+					return -1;
+				}
 				std::vector<char> data(size);
 				char* buffer = &data.front();
 				fread(buffer, 1, size, fp);
 				WebbyWrite(connection, buffer, size);
 				WebbyEndResponse(connection);
+				fclose(fp);
 			}
-			fclose(fp);
-		}
-		else
-		{
-			static const char failMessage[] = "404";
-			if( 0 == WebbyBeginResponse(connection, 404, sizeof(failMessage), 0, 0) )
+			else
 			{
+				static const char failMessage[] = "404";
+				if (WebbyBeginResponse(connection, 404, sizeof(failMessage), 0, 0))
+					return -1;
 				WebbyWrite(connection, failMessage, sizeof(failMessage));
 				WebbyEndResponse(connection);
 			}
@@ -198,7 +269,7 @@ private:
 			OIS_WEBBY_INFO( "[webby_ws_connect] header[%d]: %s = %s", i, connection->request.headers[i].name, connection->request.headers[i].value);
 		}
 
-		OisWebsocketHost& self = *(OisWebsocketHost*)connection->user_host_data;
+		OisWebHost& self = *(OisWebHost*)connection->user_host_data;
 		
 		bool handled = false;
 		if( 0==strcmp(connection->request.uri, "/input") )
@@ -217,7 +288,7 @@ private:
 	static void webby_ws_closed(struct WebbyConnection *connection)
 	{
 		OIS_WEBBY_INFO( "[webby_ws_closed] url:%s", connection->request.uri);
-		OisWebsocketHost& self = *(OisWebsocketHost*)connection->user_host_data;
+		OisWebHost& self = *(OisWebHost*)connection->user_host_data;
 		OisWebsocketConnection* oisConnection = (OisWebsocketConnection*)connection->user_data;
 		self.m_connections.erase( std::find(self.m_connections.begin(), self.m_connections.end(), oisConnection) );
 		connection->user_data = 0;

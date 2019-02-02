@@ -61,6 +61,7 @@ struct OIS_STRING_BUILDER
 		result.resize(length);
 		char* buffer = &result[0];
 		vsnprintf(buffer, length, fmt, v);
+		result.resize(length-1);//don't keep the \0 terminator as part of the std::string data
 		return buffer;
 	}
 	char* AllocTemp(unsigned bytes)

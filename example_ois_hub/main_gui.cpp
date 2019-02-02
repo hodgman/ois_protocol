@@ -88,7 +88,7 @@ void DoConnectingGui(struct nk_context* ctx)
 	{
 		for( auto it = portList.begin(); it != portList.end(); ++it )
 		{
-			std::string label = it->name + '(' + it->path + ')';
+			std::string label = it->name + " (" + it->path + ')';
 			if( nk_button_label(ctx, label.c_str()) )
 			{
 				InputOis_Connect(*it);
