@@ -173,25 +173,10 @@ private:
 #endif
 #endif
 
-class OisDevice
+
+class OisState
 {
 public:
-	OisDevice(OIS_PORT& port, const OIS_STRING& name, unsigned gameVersion, const char* gameName)
-		: m_port(port)
-		, m_deviceName(name)
-		, m_gameVersion(gameVersion)
-		, m_gameName(gameName)
-	{
-		ClearState();
-	}
-	const char* GetDeviceName() const { return m_deviceNameOverride.empty() ? m_deviceName.c_str() : m_deviceNameOverride.c_str(); }
-	uint32_t    GetProductID()  const { return m_pid; }
-	uint32_t    GetVendorID()   const { return m_vid; }
-	bool        Connecting()    const { return m_connectionState != Handshaking; }
-	bool        Connected()     const { return m_connectionState == Active; }
-	
-	void Poll(OIS_STRING_BUILDER&);
-	
 	enum NumericType
 	{
 		Boolean,
@@ -216,28 +201,8 @@ public:
 		uint16_t channel;
 		OIS_STRING name;
 	};
-	
-	const OIS_VECTOR<NumericValue>& DeviceInputs()  const { return m_numericInputs; }
-	const OIS_VECTOR<NumericValue>& DeviceOutputs() const { return m_numericOutputs; }
-	const OIS_VECTOR<Event>&        DeviceEvents()  const { return m_events; }
 
-	template<class T>
-	bool PopEvents(T& fn)
-	{
-		if( m_eventBuffer.empty() )
-			return false;
-		for( uint16_t channel : m_eventBuffer )
-		{
-			const Event* e = FindChannel(m_events, channel);
-			if( e )
-				fn(*e);
-		}
-		m_eventBuffer.clear();
-		return true;
-	}
-
-	void SetInput(const NumericValue& input, Value value);
-private:
+protected:
 	enum ClientCommandsAscii
 	{
 		//v1 commands
@@ -259,17 +224,17 @@ private:
 	};
 	enum ClientCommandsBin
 	{
-		CL_NUL   = 0x00,
-		CL_CMD   = 0x01,
-		CL_NIO   = 0x02,
-		CL_ACT   = 0x03,
-		CL_SYN_  = 'S',//0x53
-		CL_DBG   = 0x04,
-		CL_451_  = '4',//0x34
-		CL_END_  = 'E',//0x45
-		CL_TNI   = 0x05,
-		CL_PID   = 0x06,
-		CL_END   = 0x07,
+		CL_NUL = 0x00,
+		CL_CMD = 0x01,
+		CL_NIO = 0x02,
+		CL_ACT = 0x03,
+		CL_SYN_ = 'S',//0x53
+		CL_DBG = 0x04,
+		CL_451_ = '4',//0x34
+		CL_END_ = 'E',//0x45
+		CL_TNI = 0x05,
+		CL_PID = 0x06,
+		CL_END = 0x07,
 		CL_VAL_1 = 0x08,
 		CL_VAL_2 = 0x09,
 		CL_VAL_3 = 0x0A,
@@ -278,25 +243,25 @@ private:
 		CL_EXC_1 = 0x0D,
 		CL_EXC_2 = 0x0E,
 
-		CL_COMMAND_MASK  = 0x0F,
+		CL_COMMAND_MASK = 0x0F,
 		CL_PAYLOAD_SHIFT = 4,
 
 		CL_N_PAYLOAD_N = 0x10,
 		CL_N_PAYLOAD_F = 0x20,
 		CL_N_PAYLOAD_O = 0x40,
-		
+
 		CL_TNI_PAYLOAD_T = 0x10,
 	};
 	enum ServerCommandsBin
 	{
-		SV_NUL   = 0x00,
+		SV_NUL = 0x00,
 		SV_VAL_1 = 0x01,
 		SV_VAL_2 = 0x02,
 		SV_VAL_3 = 0x03,
 		SV_VAL_4 = 0x04,
 		SV_END_ = 'E',//0x45
 
-		SV_COMMAND_MASK  = 0x07,
+		SV_COMMAND_MASK = 0x07,
 		SV_PAYLOAD_SHIFT = 3,
 	};
 	enum DeviceState
@@ -306,49 +271,275 @@ private:
 		Active,
 	};
 	typedef uint32_t DeviceStateMask;
-	
+
+	static int CmdStrLength(const char* c, const char* end, char terminator);
 	static char* ZeroDelimiter(char* str, char delimiter);
+	template<class T> static T Clamp(T x, T min, T max) { return x < min ? min : (x > max ? max : x); }
+	template<class T> static typename T::value_type* FindChannel(T& values, int channel);
+};
+
+
+template<class CRTP>
+class OisBase : protected OisState
+{
+public:
+	bool ReadCommands();
+	void ProcessCommands();
 	void SendData(const char* cmd, int length);
 	void SendText(const char* cmd);
 	bool ExpectState(DeviceStateMask state, const char* cmd, unsigned version);
-	void ClearState();
-	bool ProcessAscii(char* cmd, OIS_STRING_BUILDER&);
-	int ProcessBinary(char* start, char* end);
+	void _ClearState()                                    { return static_cast<CRTP*>(this)->ClearState(); }
+	bool _ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb) { return static_cast<CRTP*>(this)->ProcessAscii(cmd, sb); }
+	int  _ProcessBinary(char* start, char* end)           { return static_cast<CRTP*>(this)->ProcessBinary(start, end); }
 
 	OIS_PORT& m_port;
 	OIS_STRING m_deviceName;
 
 	unsigned m_gameVersion;
-	const char* m_gameName;
+	OIS_STRING m_gameName;
 
-	OIS_STRING m_deviceNameOverride;
-	unsigned m_portId;
 	unsigned m_protocolVersion;
 	bool     m_binary;
 	uint32_t m_pid;
 	uint32_t m_vid;
 	DeviceState m_connectionState;
-	char m_commandBuffer[OIS_MAX_COMMAND_LENGTH*2];
+	char m_commandBuffer[OIS_MAX_COMMAND_LENGTH * 2];
 	unsigned m_commandLength;
-	
+
 	OIS_VECTOR<NumericValue> m_numericInputs;
 	OIS_VECTOR<NumericValue> m_numericOutputs;
-	OIS_VECTOR<uint16_t>     m_queuedInputs;
 	OIS_VECTOR<Event>        m_events;
-	OIS_VECTOR<uint16_t>     m_eventBuffer;
 
-	template<class T>
-	static typename T::value_type* FindChannel(T& values, int channel)
+	OisBase(OIS_PORT& port, const OIS_STRING& name, unsigned gameVersion, const char* gameName)
+		: m_port(port)
+		, m_deviceName(name)
+		, m_gameVersion(gameVersion)
+		, m_gameName(gameName)
 	{
-		for( auto& v : values )
-			if( v.channel == channel )
-				return &v;
-		return nullptr;
+		_ClearState();
 	}
-	template<class T> static T Clamp( T x, T min, T max ) { return x < min ? min : (x > max ? max : x); }
+
+	OisBase(OIS_PORT& port, const OIS_STRING& name, uint32_t pid, uint32_t vid)
+		: m_port(port)
+		, m_deviceName(name)
+		, m_pid(pid)
+		, m_vid(vid)
+	{
+		_ClearState();
+	}
 };
 
+//Use this class on the host to talk to a device
+class OisDevice : private OisBase<OisDevice>
+{
+public:
+	OisDevice(OIS_PORT& port, const OIS_STRING& name, unsigned gameVersion, const char* gameName)
+		: OisBase(port, name, gameVersion, gameName)
+	{
+	}
+	const char* GetDeviceName() const { return m_deviceNameOverride.empty() ? m_deviceName.c_str() : m_deviceNameOverride.c_str(); }
+	uint32_t    GetProductID()  const { return m_pid; }
+	uint32_t    GetVendorID()   const { return m_vid; }
+	bool        Connecting()    const { return m_connectionState != Handshaking; }
+	bool        Connected()     const { return m_connectionState == Active; }
+	
+	void Poll(OIS_STRING_BUILDER&);
+	
+	const OIS_VECTOR<NumericValue>& DeviceInputs()  const { return m_numericInputs; }
+	const OIS_VECTOR<NumericValue>& DeviceOutputs() const { return m_numericOutputs; }
+	const OIS_VECTOR<Event>&        DeviceEvents()  const { return m_events; }
+
+	template<class T>
+	bool PopEvents(T& fn);
+
+	void SetInput(const NumericValue& input, Value value);
+private:
+	friend class OisBase<OisDevice>;
+	void ClearState();
+	bool ProcessAscii(char* cmd, OIS_STRING_BUILDER&);
+	int  ProcessBinary(char* start, char* end);
+
+	OIS_STRING           m_deviceNameOverride;
+	OIS_VECTOR<uint16_t> m_queuedInputs;
+	OIS_VECTOR<uint16_t> m_eventBuffer;
+};
+
+//Use this class on the device to talk to a host
+class OisHost : private OisBase<OisHost>
+{
+public:
+	OisHost(OIS_PORT& port, const OIS_STRING& name, uint32_t pid, uint32_t vid)
+		: OisBase(port, name, pid, vid)
+	{
+	}
+
+	const OIS_STRING& GetGameName()    const { return m_gameName; }
+	unsigned          GetGameVersion() const { return m_gameVersion; }
+	bool              Connecting()     const { return m_connectionState != Handshaking; }
+	bool              Connected()      const { return m_connectionState == Active; }
+
+	void Poll(OIS_STRING_BUILDER&);
+
+	const OIS_VECTOR<NumericValue>& DeviceInputs()  const { return m_numericInputs; }
+	const OIS_VECTOR<NumericValue>& DeviceOutputs() const { return m_numericOutputs; }
+	const OIS_VECTOR<Event>&        DeviceEvents()  const { return m_events; }
+
+	template<class T>
+	bool PopEvents(T& fn);
+
+	void SetInput(const NumericValue& input, Value value);
+private:
+	friend class OisBase<OisHost>;
+	void ClearState();
+	bool ProcessAscii(char* cmd, OIS_STRING_BUILDER&);
+	int  ProcessBinary(char* start, char* end);
+
+	OIS_STRING           m_deviceNameOverride;
+	OIS_VECTOR<uint16_t> m_queuedInputs;
+	OIS_VECTOR<uint16_t> m_eventBuffer;
+};
+
+
+
+template<class T> typename T::value_type* OisState::FindChannel(T& values, int channel)
+{
+	for (auto& v : values)
+		if (v.channel == channel)
+			return &v;
+	return nullptr;
+}
+
+template<class T>
+void OisBase<T>::SendData(const char* cmd, int length)
+{
+	m_port.Write(cmd, length);
+}
+
+template<class T>
+void OisBase<T>::SendText(const char* cmd)
+{
+	m_port.Write(cmd, (int)strlen(cmd));
+}
+
+template<class T>
+bool OisBase<T>::ReadCommands()
+{
+	int len = m_port.Read(m_commandBuffer + m_commandLength, OIS_ARRAYSIZE(m_commandBuffer) - m_commandLength);
+	if (!len)
+		return false;
+	m_commandLength += len;
+	OIS_ASSERT(m_commandLength <= OIS_ARRAYSIZE(m_commandBuffer));
+	return true;
+}
+
+template<class T>
+void OisBase<T>::ProcessCommands()
+{
+	char* start = m_commandBuffer;
+	char* end = start + m_commandLength;
+	if (m_binary)
+	{
+		while (start < end)
+		{
+			int commandLength = _ProcessBinary(start, end);
+			if (commandLength == 0)//need to read more data
+				break;
+			if (commandLength < 0)//not a binary command!
+			{
+				_ClearState();
+				return;
+			}
+			start += commandLength;//processed
+		}
+	}
+	else
+	{
+		for (char* c = start; c != end; ++c)
+		{
+			if (*c != '\n')
+				continue;
+			*c = '\0';
+			_ProcessAscii(start, sb);
+			start = c + 1;
+		}
+	}
+	OIS_ASSERT(start <= end);
+
+	if (start == m_commandBuffer && end == m_commandBuffer + OIS_ARRAYSIZE(m_commandBuffer))
+	{
+		OIS_WARN("OisDevice command buffer is full without a valid command present! Ending...");
+		OIS_INFO("-> END");
+		SendText("END\n");
+		_ClearState();
+	}
+	else
+	{
+		m_commandLength = (unsigned)(end - start);
+		if (start != m_commandBuffer)
+			memmove(m_commandBuffer, start, m_commandLength);
+	}
+}
+
+template<class T>
+bool OisBase<T>::ExpectState(DeviceStateMask state, const char* cmd, unsigned version)
+{
+	if (m_protocolVersion < version)
+		OIS_WARN("Did not expect command under version #%d: %s", m_protocolVersion, cmd);
+	bool badState = 0 == ((1 << m_connectionState) & state);
+	if (badState)
+	{
+		OIS_WARN("Did not expect command at this time: %s", cmd);
+		if (m_connectionState == Handshaking)
+		{
+			_ClearState();
+			SendText("END\n");
+		}
+		return false;
+	}
+	return true;
+}
+
+
+template<class T>
+bool OisDevice::PopEvents(T& fn)
+{
+	if (m_eventBuffer.empty())
+		return false;
+	for (uint16_t channel : m_eventBuffer)
+	{
+		const Event* e = FindChannel(m_events, channel);
+		if (e)
+			fn(*e);
+	}
+	m_eventBuffer.clear();
+	return true;
+}
+
 #ifdef OIS_DEVICE_IMPL
+
+char* OisState::ZeroDelimiter(char* str, char delimiter)
+{
+	char* c = str;
+	for (; *c; ++c)
+	{
+		if (*c == delimiter)
+		{
+			*c = '\0';
+			return c + 1;
+		}
+	}
+	return c;
+}
+
+int OisState::CmdStrLength(const char* c, const char* end, char terminator)
+{
+	int length = 0;
+	bool foundNull = false;
+	for (; c != end && !foundNull; ++c, ++length)
+		foundNull = *c == terminator;
+	return length + (foundNull ? 0 : OIS_MAX_COMMAND_LENGTH * 2);
+}
+
 void OisDevice::Poll(OIS_STRING_BUILDER& sb)
 {
 	if( !m_port.IsConnected() )
@@ -360,55 +551,9 @@ void OisDevice::Poll(OIS_STRING_BUILDER& sb)
 	}
 	for( ;; )
 	{
-		int len = m_port.Read(m_commandBuffer+m_commandLength, OIS_ARRAYSIZE(m_commandBuffer)-m_commandLength);
-		if( !len )
+		if( !ReadCommands() )
 			break;
-		m_commandLength += len;
-		OIS_ASSERT( m_commandLength <= OIS_ARRAYSIZE(m_commandBuffer) );
-
-		char* start = m_commandBuffer;
-		char* end = start + m_commandLength;
-		if( m_binary )
-		{
-			while( start < end )
-			{
-				int commandLength = ProcessBinary(start, end);
-				if( commandLength == 0 )//need to read more data
-					break;
-				if( commandLength < 0 )//not a binary command!
-				{
-					ClearState();
-					return;
-				}
-				start += commandLength;//processed
-			}
-		}
-		else
-		{
-			for( char* c = start; c != end; ++c )
-			{
-				if( *c != '\n' )
-					continue;
-				*c = '\0';
-				ProcessAscii(start, sb);
-				start = c+1;
-			}
-		}
-		OIS_ASSERT( start <= end );
-
-		if( start == m_commandBuffer && end == m_commandBuffer+OIS_ARRAYSIZE(m_commandBuffer) )
-		{
-			OIS_WARN("OisDevice command buffer is full without a valid command present! Ending...");
-			OIS_INFO( "-> END" );
-			SendText("END\n");
-			ClearState();
-		}
-		else
-		{
-			m_commandLength = (unsigned)(end-start);
-			if( start != m_commandBuffer )
-				memmove(m_commandBuffer, start, m_commandLength);
-		}
+		ProcessCommands();
 	}
 	for( int index : m_queuedInputs )
 	{
@@ -475,29 +620,6 @@ void OisDevice::Poll(OIS_STRING_BUILDER& sb)
 			SendText(sb.FormatTemp("%d=%d\n", v.channel, data));
 	}
 	m_queuedInputs.clear();
-}
-
-char* OisDevice::ZeroDelimiter(char* str, char delimiter)
-{
-	char* c = str;
-	for( ; *c; ++c )
-	{
-		if( *c == delimiter )
-		{
-			*c = '\0';
-			return c + 1; 
-		}
-	}
-	return c;
-}
-
-static int CmdStrLength(const char* c, const char* end, char terminator)
-{
-	int length = 0;
-	bool foundNull = false;
-	for( ; c != end && !foundNull; ++c, ++length )
-		foundNull = *c == terminator;
-	return length + (foundNull ? 0 : OIS_MAX_COMMAND_LENGTH*2);
 }
 
 int OisDevice::ProcessBinary(char* start, char* end)
@@ -885,34 +1007,6 @@ void OisDevice::SetInput(const NumericValue& input, Value value)
 	m_queuedInputs.push_back(index);
 }
 
-void OisDevice::SendData(const char* cmd, int length)
-{
-	m_port.Write(cmd, length);
-}
-
-void OisDevice::SendText(const char* cmd)
-{
-	m_port.Write(cmd, (int)strlen(cmd));
-}
-
-bool OisDevice::ExpectState(DeviceStateMask state, const char* cmd, unsigned version)
-{
-	if( m_protocolVersion < version )
-		OIS_WARN("Did not expect command under version #%d: %s", m_protocolVersion, cmd);
-	bool badState = 0 == ((1<<m_connectionState) & state);
-	if( badState )
-	{
-		OIS_WARN("Did not expect command at this time: %s", cmd);
-		if( m_connectionState == Handshaking )
-		{
-			ClearState();
-			SendText("END\n");
-		}
-		return false;
-	}
-	return true;
-}
-
 void OisDevice::ClearState()
 {
 	m_connectionState = Handshaking;
@@ -927,8 +1021,6 @@ void OisDevice::ClearState()
 	m_queuedInputs.clear();
 	m_events.clear();
 	m_eventBuffer.clear();
-//	if( m_port.IsConnected() )
-//		m_port.SetBaud(9600);
 }
 #endif // OIS_DEVICE_IMPL
 

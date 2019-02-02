@@ -114,7 +114,7 @@ static void UpdateDevice( OisDeviceEx& d )
 {
 	d.device->Poll(sb);
 	d.newEvents.clear();
-	d.device->PopEvents([&](const OisDevice::Event& event)
+	d.device->PopEvents([&](const OisState::Event& event)
 	{
 		d.eventLog.push_back(event.name.c_str());
 		d.newEvents.push_back(&event);

@@ -158,11 +158,11 @@ void DoOisGui(struct nk_context* ctx, OisDeviceEx& d)
 			{
 				nk_layout_row(ctx, NK_DYNAMIC, 30, 2, ratio2);
 				nk_label(ctx, "Value", NK_TEXT_LEFT);
-				OisDevice::Value newValue;
+				OisState::Value newValue;
 				bool set = false;
 				switch( it->type )
 				{
-					case OisDevice::Boolean:
+					case OisState::Boolean:
 					{
 						int boolean = it->value.boolean ? 1 : 0;
 						nk_checkbox_label(ctx, name.c_str(), &boolean);
@@ -170,7 +170,7 @@ void DoOisGui(struct nk_context* ctx, OisDeviceEx& d)
 						newValue.boolean = !!boolean;
 						break;
 					}
-					case OisDevice::Number:
+					case OisState::Number:
 					{
 						int number = it->value.number;
 						nk_property_int(ctx, name.c_str(), SHRT_MIN, &number, SHRT_MAX, 1, 1);
@@ -178,7 +178,7 @@ void DoOisGui(struct nk_context* ctx, OisDeviceEx& d)
 						newValue.number = number;
 						break;
 					}
-					case OisDevice::Fraction: 
+					case OisState::Fraction:
 					{
 						float fraction = it->value.fraction;
 						nk_property_float(ctx, name.c_str(), SHRT_MIN/100.0f, &fraction, SHRT_MAX/100.0f, 0.01f, 0.01f);
@@ -209,9 +209,9 @@ void DoOisGui(struct nk_context* ctx, OisDeviceEx& d)
 				nk_label(ctx, "Value", NK_TEXT_LEFT);
 				switch( it->type )
 				{
-				case OisDevice::Boolean:  nk_label(ctx, it->value.boolean ? "True" : "False", NK_TEXT_LEFT); break;
-				case OisDevice::Number:	  nk_labelf(ctx, NK_TEXT_LEFT, "%d", it->value.number); break;
-				case OisDevice::Fraction: nk_labelf(ctx, NK_TEXT_LEFT, "%f", it->value.fraction); break;
+				case OisState::Boolean:  nk_label(ctx, it->value.boolean ? "True" : "False", NK_TEXT_LEFT); break;
+				case OisState::Number:   nk_labelf(ctx, NK_TEXT_LEFT, "%d", it->value.number); break;
+				case OisState::Fraction: nk_labelf(ctx, NK_TEXT_LEFT, "%f", it->value.fraction); break;
 				}
 				nk_tree_pop(ctx);
 			}
@@ -283,7 +283,7 @@ void DoVJoyUpdate(std::vector<OisDeviceEx*>& devices)
 		//map events onto buttons:
 		for( auto it = item->newEvents.begin(); it != item->newEvents.end(); ++it )
 		{
-			const OisDevice::Event* event = *it;
+			const OisState::Event* event = *it;
 			int index = (int)(ptrdiff_t)(event - &events.front());
 			if( index >= 0 && index < numButtons )
 				g_vJoyState.buttonValues[index] = true;
@@ -292,11 +292,11 @@ void DoVJoyUpdate(std::vector<OisDeviceEx*>& devices)
 		//numeric output bools to buttons, others to axes
 		for( auto it = outputs.begin(); it != outputs.end(); ++it )
 		{
-			if( it->type == OisDevice::Boolean )
+			if( it->type == OisState::Boolean )
 				g_vJoyState.buttonValues[numButtons++] = it->value.boolean;
 			else
 			{
-				if( it->type == OisDevice::Number )
+				if( it->type == OisState::Number )
 					g_vJoyState.axisValues[numAxes++] = it->value.number / (float)MAXSHORT;
 				else
 					g_vJoyState.axisValues[numAxes++] = it->value.fraction / 100.0f;

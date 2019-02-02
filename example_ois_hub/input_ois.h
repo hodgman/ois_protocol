@@ -17,7 +17,7 @@ struct OisDeviceEx
 	IOisPort* port = nullptr;
 	OisDevice* device = nullptr;
 	std::vector<const char*> eventLog;
-	std::vector<const OisDevice::Event*> newEvents;
+	std::vector<const OisState::Event*> newEvents;
 	int updateCount = 0;
 };
 
