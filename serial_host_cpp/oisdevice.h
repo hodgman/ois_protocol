@@ -230,8 +230,18 @@ public:
 		uint16_t channel;
 		OIS_STRING name;
 	};
+	struct VariableName
+	{
+		OIS_STRING  name;
+		NumericType type;
+	};
 protected:
-	enum ClientCommandsAscii
+	struct ChannelIndex
+	{
+		uint16_t channel;
+		uint16_t index;
+	};
+	enum CommandsAscii
 	{
 		//v1 commands
 		SYN = OIS_FOURCC("SYN="),
@@ -303,10 +313,11 @@ protected:
 	static uint16_t ToRawValue(NumericType type, Value value);
 	static Value    FromRawValue(NumericType type, uint16_t value);
 	static int      PackNumericValueCommand(const NumericValue& v, uint8_t cmd[5], unsigned PAYLOAD_SHIFT, unsigned VAL_1, unsigned VAL_2, unsigned VAL_3, unsigned VAL_4);
-	static bool     SetValueAndEnqueue(const NumericValue& input, Value value, OIS_VECTOR<NumericValue>& values, OIS_VECTOR<uint16_t> queue);
+	static bool     SetValueAndEnqueue(const NumericValue& input, Value value, OIS_VECTOR<NumericValue>& values, OIS_VECTOR<ChannelIndex> queue);
 	static int      CmdStrLength(const char* c, const char* end, char terminator);
 	static char*    ZeroDelimiter(char* str, char delimiter);
 	template<class T> static typename T::value_type* FindChannel(T& values, int channel);
+	template<class T> static typename T::value_type* FindChannel(T& values, ChannelIndex);
 	template<class T> static T Clamp(T x, T min, T max) { return x < min ? min : (x > max ? max : x); }
 };
 
@@ -318,7 +329,7 @@ template<class CRTP> class OisBase : protected OisState
 protected:
 	bool ReadCommands();
 	void ProcessCommands();
-	void SendData(const char* cmd, int length);
+	void SendData(const uint8_t* cmd, int length);
 	void SendText(const char* cmd);
 	void SendValue(const NumericValue& v, OIS_STRING_BUILDER& sb, unsigned PAYLOAD_SHIFT, unsigned VAL_1, unsigned VAL_2, unsigned VAL_3, unsigned VAL_4);
 	void ConnectAndPoll();
@@ -327,23 +338,23 @@ protected:
 	bool _ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb) { return static_cast<CRTP*>(this)->ProcessAscii(cmd, sb); }
 	int  _ProcessBinary(char* start, char* end)           { return static_cast<CRTP*>(this)->ProcessBinary(start, end); }
 
-	OIS_PORT& m_port;
-	OIS_STRING m_deviceName;
-
-	unsigned m_gameVersion = 0;
-	OIS_STRING m_gameName;
-
-	unsigned m_protocolVersion = 1;
-	bool     m_binary = false;
-	uint32_t m_pid = 0;
-	uint32_t m_vid = 0;
-	DeviceState m_connectionState = Handshaking;
-	char m_commandBuffer[OIS_MAX_COMMAND_LENGTH * 2];
-	unsigned m_commandLength = 0;
-
 	OIS_VECTOR<NumericValue> m_numericInputs;
 	OIS_VECTOR<NumericValue> m_numericOutputs;
 	OIS_VECTOR<Event>        m_events;
+
+	OIS_PORT& m_port;
+	OIS_STRING m_deviceName;
+
+	OIS_STRING m_gameName;
+	unsigned m_gameVersion = 0;
+
+	unsigned m_protocolVersion = 1;
+	uint32_t m_pid = 0;
+	uint32_t m_vid = 0;
+	DeviceState m_connectionState = Handshaking;
+	unsigned m_commandLength = 0;
+	char m_commandBuffer[OIS_MAX_COMMAND_LENGTH * 2];
+	bool     m_binary = false;
 
 	OisBase(OIS_PORT& port, const OIS_STRING& name, unsigned gameVersion, const char* gameName)
 		: m_port(port)
@@ -387,15 +398,16 @@ public:
 	template<class T>
 	bool PopEvents(T& fn);//calls fn(const Event&)
 	bool SetInput(const NumericValue& input, Value value);
+	bool SetInput(uint16_t inputChannel, Value value);
 private:
 	friend class OisBase<OisDevice>;
 	void ClearState();
 	bool ProcessAscii(char* cmd, OIS_STRING_BUILDER&);
 	int  ProcessBinary(char* start, char* end);
 
-	OIS_STRING           m_deviceNameOverride;
-	OIS_VECTOR<uint16_t> m_queuedInputs;
-	OIS_VECTOR<uint16_t> m_eventBuffer;
+	OIS_STRING               m_deviceNameOverride;
+	OIS_VECTOR<ChannelIndex> m_queuedInputs;
+	OIS_VECTOR<ChannelIndex> m_eventBuffer;
 };
 
 //------------------------------------------------------------------------------
@@ -419,16 +431,29 @@ public:
 
 	void Poll(OIS_STRING_BUILDER&);
 
-	void Activate(const Event&);
+	uint16_t AddEvent(const OIS_STRING& name);
+	uint16_t AddInput(const OIS_STRING& name, NumericType type);
+	uint16_t AddOutput(const OIS_STRING& name, NumericType type);
+
+	bool RemoveEvent(uint16_t channel);
+	bool RemoveInput(uint16_t channel);
+	bool RemoveOutput(uint16_t channel);
+
+	bool Activate(const Event&);
+	bool Activate(uint16_t eventChannel);
 	bool SetOutput(const NumericValue& output, Value value);
+	bool SetOutput(uint16_t outputChannel, Value value);
+	bool ToggleInput(const NumericValue& input, bool active);
+	bool ToggleInput(uint16_t inputChannel, bool active);
 private:
 	friend class OisBase<OisHost>;
 	void ClearState();
 	bool ProcessAscii(char* cmd, OIS_STRING_BUILDER&);
 	int  ProcessBinary(char* start, char* end);
 
-	OIS_VECTOR<uint16_t> m_queuedOutputs;
-	OIS_VECTOR<uint16_t> m_eventBuffer;
+	OIS_VECTOR<ChannelIndex> m_queuedInputToggles;
+	OIS_VECTOR<ChannelIndex> m_queuedOutputs;
+	OIS_VECTOR<ChannelIndex> m_eventBuffer;
 };
 
 
@@ -442,12 +467,23 @@ template<class T> typename T::value_type* OisState::FindChannel(T& values, int c
 	return nullptr;
 }
 
+template<class T> typename T::value_type* OisState::FindChannel(T& values, ChannelIndex i)
+{
+	if (i.index < values.size())
+	{
+		T::value_type& v = values[i.index];
+		if (v.channel == i.channel)
+			return &v;
+	}
+	return FindChannel(values, i.channel);
+}
+
 //------------------------------------------------------------------------------
 
 template<class T>
-void OisBase<T>::SendData(const char* cmd, int length)
+void OisBase<T>::SendData(const uint8_t* cmd, int length)
 {
-	m_port.Write(cmd, length);
+	m_port.Write((char*)cmd, length);
 }
 
 template<class T>
@@ -463,7 +499,7 @@ void OisBase<T>::SendValue(const NumericValue& v, OIS_STRING_BUILDER& sb, unsign
 	{
 		uint8_t cmd[5];
 		int cmdLength = PackNumericValueCommand(v, cmd, PAYLOAD_SHIFT, VAL_1, VAL_2, VAL_3, VAL_4);
-		SendData((char*)cmd, cmdLength);
+		SendData(cmd, cmdLength);
 	}
 	else
 	{
@@ -575,7 +611,7 @@ bool OisDevice::PopEvents(T& fn)
 {
 	if (m_eventBuffer.empty())
 		return false;
-	for (uint16_t channel : m_eventBuffer)
+	for (ChannelIndex channel : m_eventBuffer)
 	{
 		const Event* e = FindChannel(m_events, channel);
 		if (e)
@@ -678,17 +714,17 @@ int OisState::PackNumericValueCommand(const NumericValue& v, uint8_t cmd[5], uns
 	return cmdLength;
 }
 
-bool OisState::SetValueAndEnqueue(const NumericValue& input, Value value, OIS_VECTOR<NumericValue>& values, OIS_VECTOR<uint16_t> queue)
+bool OisState::SetValueAndEnqueue(const NumericValue& variable, Value value, OIS_VECTOR<NumericValue>& values, OIS_VECTOR<ChannelIndex> queue)
 {
 	if (values.empty())
 		return false;
-	unsigned index = (unsigned)(&input - &values.front());
+	unsigned index = (unsigned)(&variable - &values.front());
 	if (index >= values.size())
 		return false;
 	if (values[index].value.number != value.number)
 	{
 		values[index].value = value;
-		queue.push_back(index);
+		queue.push_back({ variable.channel, (uint16_t)index });
 	}
 	return true;
 }
@@ -698,16 +734,18 @@ bool OisState::SetValueAndEnqueue(const NumericValue& input, Value value, OIS_VE
 void OisDevice::Poll(OIS_STRING_BUILDER& sb)
 {
 	ConnectAndPoll();
-	for (int index : m_queuedInputs)
+	for (ChannelIndex index : m_queuedInputs)
 	{
-		const NumericValue& v = m_numericInputs[index];
-		switch (v.type)
+		const NumericValue* v = FindChannel(m_numericInputs, index);
+		if (!v)
+			continue;
+		switch (v->type)
 		{
-		case Boolean:  OIS_INFO("-> %d(%s) = %s",   v.channel, v.name.c_str(), v.value.boolean ? "true" : "false"); break;
-		case Number:   OIS_INFO("-> %d(%s) = %d",   v.channel, v.name.c_str(), v.value.number);                     break;
-		case Fraction: OIS_INFO("-> %d(%s) = %.2f", v.channel, v.name.c_str(), v.value.fraction);                   break;
+		case Boolean:  OIS_INFO("-> %d(%s) = %s",   v->channel, v->name.c_str(), v->value.boolean ? "true" : "false"); break;
+		case Number:   OIS_INFO("-> %d(%s) = %d",   v->channel, v->name.c_str(), v->value.number);                     break;
+		case Fraction: OIS_INFO("-> %d(%s) = %.2f", v->channel, v->name.c_str(), v->value.fraction);                   break;
 		}
-		SendValue(v, sb, SV_PAYLOAD_SHIFT, SV_VAL_1, SV_VAL_2, SV_VAL_3, SV_VAL_4);
+		SendValue(*v, sb, SV_PAYLOAD_SHIFT, SV_VAL_1, SV_VAL_2, SV_VAL_3, SV_VAL_4);
 	}
 	m_queuedInputs.clear();
 }
@@ -860,8 +898,11 @@ int OisDevice::ProcessBinary(char* start, char* end)
 			case CL_EXC_2: channel = (*(uint16_t*)(start+1));              break;
 			}
 			Event* e = FindChannel(m_events, channel);
-			if( e )
-				m_eventBuffer.push_back(channel);
+			if (e)
+			{
+				ptrdiff_t index = e - &m_events.front();
+				m_eventBuffer.push_back({ channel, (uint16_t)index });
+			}
 			OIS_INFO( "<- EXC: %d (%s)", channel, e ? e->name.c_str() : "INVALID CHANNEL" );
 			break;
 		}
@@ -1049,8 +1090,11 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 				ExpectState( 1<<Active, cmd, 1 );
 				int channel = atoi(payload);
 				Event* e = FindChannel(m_events, channel);
-				if( e )
-					m_eventBuffer.push_back(channel);
+				if (e)
+				{
+					ptrdiff_t index = e - &m_events.front();
+					m_eventBuffer.push_back({ (uint16_t)channel, (uint16_t)index });
+				}
 				OIS_INFO( "<- EXC: %d (%s)", channel, e ? e->name.c_str() : "INVALID CHANNEL" );
 				break;
 			}
@@ -1077,6 +1121,14 @@ bool OisDevice::SetInput(const NumericValue& input, Value value)
 	return SetValueAndEnqueue(input, value, m_numericInputs, m_queuedInputs);
 }
 
+bool OisDevice::SetInput(uint16_t channel, Value value)
+{
+	const NumericValue* v = FindChannel(m_numericInputs, channel);
+	if (!v)
+		return false;
+	return SetValueAndEnqueue(*v, value, m_numericInputs, m_queuedInputs);
+}
+
 void OisDevice::ClearState()
 {
 	m_connectionState = Handshaking;
@@ -1099,24 +1151,47 @@ void OisHost::Poll(OIS_STRING_BUILDER& sb)
 {
 	ConnectAndPoll();
 
-	for (int index : m_queuedOutputs)
+	for (ChannelIndex index : m_queuedInputToggles)
 	{
-		const NumericValue& v = m_numericOutputs[index];
-		switch (v.type)
+		const NumericValue* v = FindChannel(m_numericInputs, index);
+		if (!v)
+			continue;
+		if (m_binary)
 		{
-		case Boolean:  OIS_INFO("-> %d(%s) = %s",   v.channel, v.name.c_str(), v.value.boolean ? "true" : "false"); break;
-		case Number:   OIS_INFO("-> %d(%s) = %d",   v.channel, v.name.c_str(), v.value.number);                     break;
-		case Fraction: OIS_INFO("-> %d(%s) = %.2f", v.channel, v.name.c_str(), v.value.fraction);                   break;
+			uint8_t cmd[3];
+			cmd[0] = CL_TNI | (v->active ? CL_TNI_PAYLOAD_T : 0x0);
+			cmd[1] = ( v->channel     & 0xFF);
+			cmd[2] = ((v->channel>>8) & 0xFF);
+			SendData(cmd, 3);
 		}
-		SendValue(v, sb, CL_PAYLOAD_SHIFT, CL_VAL_1, CL_VAL_2, CL_VAL_3, CL_VAL_4);
+		else
+		{
+			SendText(sb.FormatTemp("TNI=%d,%d\n", v->channel, v->active ? 1 : 0));
+		}
+	}
+
+	for (ChannelIndex index : m_queuedOutputs)
+	{
+		const NumericValue* v = FindChannel(m_numericOutputs, index);
+		if (!v)
+			continue;
+		switch (v->type)
+		{
+		case Boolean:  OIS_INFO("-> %d(%s) = %s",   v->channel, v->name.c_str(), v->value.boolean ? "true" : "false"); break;
+		case Number:   OIS_INFO("-> %d(%s) = %d",   v->channel, v->name.c_str(), v->value.number);                     break;
+		case Fraction: OIS_INFO("-> %d(%s) = %.2f", v->channel, v->name.c_str(), v->value.fraction);                   break;
+		}
+		SendValue(*v, sb, CL_PAYLOAD_SHIFT, CL_VAL_1, CL_VAL_2, CL_VAL_3, CL_VAL_4);
 	}
 	m_queuedOutputs.clear();
 
-	for (int index : m_eventBuffer)
+	for (ChannelIndex index : m_eventBuffer)
 	{
-		const Event& e = m_events[index];
+		const Event* e = FindChannel(m_events, index);
+		if (!e)
+			continue;
 
-		OIS_INFO("-> EXC: %d (%s)", e.channel, e.name.c_str());
+		OIS_INFO("-> EXC: %d (%s)", e->channel, e->name.c_str());
 		if (m_binary)
 		{
 			const unsigned extraBits = 8 - CL_PAYLOAD_SHIFT;
@@ -1125,29 +1200,29 @@ void OisHost::Poll(OIS_STRING_BUILDER& sb)
 
 			uint8_t cmd[3];
 			int cmdLength;
-			if (e.channel < channelLimit1)
+			if (e->channel < channelLimit1)
 			{
 				cmdLength = 1;
-				cmd[0] = CL_EXC_0 | (uint8_t)(e.channel << CL_PAYLOAD_SHIFT);
+				cmd[0] = CL_EXC_0 | (uint8_t)(e->channel << CL_PAYLOAD_SHIFT);
 			}
-			else if (e.channel < channelLimit2)
+			else if (e->channel < channelLimit2)
 			{
 				cmdLength = 2;
-				cmd[0] = CL_EXC_1 | (uint8_t)((e.channel>>8) << CL_PAYLOAD_SHIFT);
-				cmd[1] = (uint8_t)(e.channel & 0xFF);
+				cmd[0] = CL_EXC_1 | (uint8_t)((e->channel>>8) << CL_PAYLOAD_SHIFT);
+				cmd[1] = (uint8_t)(e->channel & 0xFF);
 			}
 			else
 			{
 				cmdLength = 3;
 				cmd[0] = CL_EXC_2;
-				cmd[1] = (uint8_t)( e.channel     & 0xFF);
-				cmd[2] = (uint8_t)((e.channel>>8) & 0xFF);
+				cmd[1] = (uint8_t)( e->channel     & 0xFF);
+				cmd[2] = (uint8_t)((e->channel>>8) & 0xFF);
 			}
-			SendData((char*)cmd, cmdLength);
+			SendData(cmd, cmdLength);
 		}
 		else
 		{
-			SendText(sb.FormatTemp("EXC=%d\n", e.channel));
+			SendText(sb.FormatTemp("EXC=%d\n", e->channel));
 		}
 	}
 	m_eventBuffer.clear();
@@ -1279,9 +1354,60 @@ bool OisHost::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 	return true;
 }
 
+bool OisHost::Activate(const Event& event)
+{
+	if (m_events.empty())
+		return false;
+	ptrdiff_t index = &event - &m_events.front();
+	if (index < 0 || index >= (int)m_events.size())
+		return false;
+	m_eventBuffer.push_back({ event.channel, (uint16_t)index });
+	return true;
+}
+
+bool OisHost::Activate(uint16_t channel)
+{
+	const Event* e = FindChannel(m_events, channel);
+	if (!e)
+		return false;
+	return Activate(*e);
+}
+
 bool OisHost::SetOutput(const NumericValue& output, Value value)
 {
 	return SetValueAndEnqueue(output, value, m_numericOutputs, m_queuedOutputs);
+}
+
+bool OisHost::SetOutput(uint16_t channel, Value value)
+{
+	const NumericValue* v = FindChannel(m_numericOutputs, channel);
+	if (!v)
+		return false;
+	return SetValueAndEnqueue(*v, value, m_numericOutputs, m_queuedOutputs);
+}
+
+bool OisHost::ToggleInput(const NumericValue& input, bool active)
+{
+	if (m_numericInputs.empty())
+		return false;
+	unsigned index = (unsigned)(&input - &m_numericInputs.front());
+	if (index >= m_numericInputs.size())
+		return false;
+	NumericValue& v = m_numericInputs[index];
+	if (v.active != active)
+	{
+		v.active = active;
+		m_queuedInputToggles.push_back({ input.channel, (uint16_t)index });
+	}
+	return true;
+}
+
+bool OisHost::ToggleInput(uint16_t channel, bool active)
+{
+	const NumericValue* v = FindChannel(m_numericInputs, channel);
+	if (!v)
+		return false;
+	return ToggleInput(*v, active);
 }
 
 void OisHost::ClearState()
@@ -1292,6 +1418,7 @@ void OisHost::ClearState()
 	m_gameVersion = 0;
 	m_gameName = "";
 	m_commandLength = 0;
+	m_queuedInputToggles.clear();
 	m_queuedOutputs.clear();
 	m_eventBuffer.clear();
 }
