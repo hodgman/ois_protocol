@@ -1,6 +1,8 @@
 # Open Interactivity System
 Custom user input/output devices for games.
 
+[View this file with a night/dark theme here.](https://hodgman.github.io/ois_protocol/)
+
 ## Goals
 
 By adding support for the OIS protocol to your game, your users can create their own physical input devices using hobbyist hardware such as Arduino.
@@ -31,7 +33,7 @@ TODO: How to use / configure
 
 - [javascript/example](javascript/example)
   - A HTML virtual controller using Websockets
-- [app_ois_hub](app_ois_hub/README.md)
+- [app_ois_hub](app_ois_hub/)
   - A C++ host (e.g. as you would use in a game) using serial (COM) ports and Websockets
   - A C++ client / virtual controller using serial (COM) ports
   - A virtual direct input device (translate OIS commands to vJoy commands)
