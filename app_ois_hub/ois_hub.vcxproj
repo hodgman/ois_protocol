@@ -79,18 +79,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\websocket_host_cpp\webby\webby.c" />
+    <ClCompile Include="..\cpp\webby\webby.c" />
     <ClCompile Include="main_gui.cpp" />
     <ClCompile Include="input_ois.cpp" />
     <ClCompile Include="output_vjoy.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\serial_host_cpp\oisdevice.h" />
-    <ClInclude Include="..\serial_host_cpp\serialport.hpp" />
-    <ClInclude Include="..\websocket_host_cpp\ois_webby.h" />
-    <ClInclude Include="..\websocket_host_cpp\webby\webby.h" />
-    <ClInclude Include="..\websocket_host_cpp\webby\webby_unix.h" />
-    <ClInclude Include="..\websocket_host_cpp\webby\webby_win32.h" />
+    <ClInclude Include="..\cpp\oisdevice.h" />
+    <ClInclude Include="..\cpp\serialport.hpp" />
+    <ClInclude Include="..\cpp\ois_webby.h" />
+    <ClInclude Include="..\cpp\webby\webby.h" />
+    <ClInclude Include="..\cpp\webby\webby_unix.h" />
+    <ClInclude Include="..\cpp\webby\webby_win32.h" />
     <ClInclude Include="nuklear\nuklear.h" />
     <ClInclude Include="nuklear\nuklear_gdi.h" />
     <ClInclude Include="input_ois.h" />

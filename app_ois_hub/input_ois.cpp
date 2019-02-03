@@ -7,7 +7,7 @@ void OisWebbyLog( const char* fmt, ... );
 #include "input_ois.h"
 #include <algorithm>
 
-#include "../websocket_host_cpp/ois_webby.h"
+#include "../cpp/ois_webby.h"
 
 
 class OisSerialConnection
@@ -99,9 +99,9 @@ AppGlobals g;
 
 static OisWebWhitelist g_webFiles[] =
 {
-	{ "/ois_protocol.js", "../websocket_device_html/ois_protocol.js" },
-	{ "/example/",        "../websocket_device_html/example/index.html" },
-	{ "/example/",        "../websocket_device_html/", true },
+	{ "/ois_protocol.js", "../javascript/ois_protocol.js" },
+	{ "/example/",        "../javascript/example/index.html" },
+	{ "/example/",        "../javascript/", true },
 };
 
 void InputOis_Init()
