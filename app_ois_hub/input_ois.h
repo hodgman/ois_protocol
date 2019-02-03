@@ -8,7 +8,7 @@ void OisLog( const char* category, const char* fmt, ... );
 #define OIS_WARN( fmt, ... ) OisLog("WARN", fmt, __VA_ARGS__);
 #define OIS_ASSERT( condition ) if(!(condition)){OisLog("ASSERTION", "%s(%d) : %s", __FILE__, __LINE__, #condition);}
 #define OIS_ENABLE_ERROR_LOGGING 1
-#define OIS_VIRTUAL_PORT
+#define OIS_ENABLE_VIRTUAL_PORT
 
 #include "../cpp/oisdevice.h"
 

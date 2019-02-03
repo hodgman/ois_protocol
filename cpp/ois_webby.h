@@ -2,8 +2,8 @@
 #error "Include oisdevice.h first!"
 #endif
 
-#ifndef OIS_VIRTUAL_PORT
-#error "OisWebsocketPort uses the IOisPort interface. Define OIS_VIRTUAL_PORT to opt in"
+#ifndef OIS_ENABLE_VIRTUAL_PORT
+#error "OisWebsocketPort uses the IOisPort interface. Define OIS_ENABLE_VIRTUAL_PORT to opt in"
 #endif
 
 #ifndef OIS_WEBBY_INFO

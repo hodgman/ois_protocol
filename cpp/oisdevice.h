@@ -1,5 +1,122 @@
 ﻿#ifndef OIS_DEVICE_INCLUDED
 #define OIS_DEVICE_INCLUDED
+/*** https://github.com/hodgman/ois_protocol
+ *    .██████╗.██████╗.███████╗███╗...██╗...........................
+ *    ██╔═══██╗██╔══██╗██╔════╝████╗..██║...........................
+ *    ██║...██║██████╔╝█████╗..██╔██╗.██║...........................
+ *    ██║...██║██╔═══╝.██╔══╝..██║╚██╗██║...........................
+ *    ╚██████╔╝██║.....███████╗██║.╚████║...........................
+ *    .╚═════╝.╚═╝.....╚══════╝╚═╝..╚═══╝...........................
+ *    ██╗███╗...██╗████████╗███████╗██████╗.........................
+ *    ██║████╗..██║╚══██╔══╝██╔════╝██╔══██╗........................
+ *    ██║██╔██╗.██║...██║...█████╗..██████╔╝█████╗..................
+ *    ██║██║╚██╗██║...██║...██╔══╝..██╔══██╗╚════╝..................
+ *    ██║██║.╚████║...██║...███████╗██║..██║........................
+ *    ╚═╝╚═╝..╚═══╝...╚═╝...╚══════╝╚═╝..╚═╝........................
+ *    .....█████╗..██████╗████████╗██╗██╗...██╗██╗████████╗██╗...██╗
+ *    ....██╔══██╗██╔════╝╚══██╔══╝██║██║...██║██║╚══██╔══╝╚██╗.██╔╝
+ *    ....███████║██║........██║...██║██║...██║██║...██║....╚████╔╝.
+ *    ....██╔══██║██║........██║...██║╚██╗.██╔╝██║...██║.....╚██╔╝..
+ *    ....██║..██║╚██████╗...██║...██║.╚████╔╝.██║...██║......██║...
+ *    ....╚═╝..╚═╝.╚═════╝...╚═╝...╚═╝..╚═══╝..╚═╝...╚═╝......╚═╝...
+ *    ███████╗██╗...██╗███████╗████████╗███████╗███╗...███╗.........
+ *    ██╔════╝╚██╗.██╔╝██╔════╝╚══██╔══╝██╔════╝████╗.████║.........
+ *    ███████╗.╚████╔╝.███████╗...██║...█████╗..██╔████╔██║.........
+ *    ╚════██║..╚██╔╝..╚════██║...██║...██╔══╝..██║╚██╔╝██║.........
+ *    ███████║...██║...███████║...██║...███████╗██║.╚═╝.██║.........
+ *    ╚══════╝...╚═╝...╚══════╝...╚═╝...╚══════╝╚═╝.....╚═╝.........
+ *    ..............................................................
+ *
+ *   Copyright (c) 2018-2019
+ *  
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
+ *  
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
+ *  
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ * 1) Integration / general usage:
+ *  1.1) Define any OIS_* macros to configure the library to your purposes.
+ *     Make sure that every file that includes oisdevice.h uses the same combination of OIS_* macros!
+ *  1.2) In ONE of your cpp files, Define OIS_DEVICE_IMPL
+ *  1.3) Include oisdevice.h
+ *
+ *
+ * 2) To connect to OIS devices (controllers) via Serial (COM) ports:
+ *  2.1) Enumerate the available serial ports:
+ *         OIS_PORT_LIST portList;
+ *         OIS_STRING_BUILDER sb;
+ *         SerialPort::EnumerateSerialPorts(portList, sb, -1);
+ *  2.2) For any ports that you want to attempt connection on:
+ *       Create a OisPortSerial object using the `path` member from the enumerated port list.
+ *       Create a OisDevice object using this OisPortSerial object.
+ *  2.3) Frequently call the `Poll` member function of your OisDevice objects.
+ *       All communication will occur during these calls.
+ *  2.4) To send values to the controller, inspect the `DeviceInputs` list to see the requested inputs.
+ *       Call SetInput to send input values to the controller.
+ *       (N.B. NumericInputs are for values that are sent from Host -> Device)
+ *  2.5) To receive values from the controller, inspect the `DeviceOutputs` list to see the registered outputs.
+ *       Inspect the `value` and `type` members to retrieve new values.
+ *       (N.B. NumericOutputs are for values that are sent from Device -> Host)
+ *  2.6) To receive named events from the controller, call `PopEvents` periodicaly.
+ *       This function takes a functor to receive the events.
+ *       e.g. to print event names:
+ *         device.PopEvents([](const OisState::Event& e){ printf(e.name.c_str()); });
+ *
+ *
+ * 3) To connect to OIS devices (controllers) via Websockets:
+ *  3.1) Add webby/webby.c to your project. This is a simple web server library.
+ *  3.2) After including oisdevice.h, also include ois_webby.h.
+ *  3.3) Create an OisWebHost object - this is a wrapper around a WebbyServer.
+ *  3.4) Frequently call the `Poll` member function of your OisWebHost object.
+ *       Frequencly call the `Connections` member function of your OisWebHost object
+ *        and iterate through the returned collection, handling the contained `OisDevice`
+ *        objects as described above in 2.4/2.5/2.6.
+ *       e.g.
+ *         OIS_STRING_BUILDER sb;
+ *         m_oisWebHost->Poll();
+ *         for( OisWebsocketConnection* c : m_oisWebHost->Connections() )
+ *         {
+ *           c->m_device.Poll(sb);
+ *           c->m_device.PopEvents([](const OisState::Event& e){ printf(e.name.c_str()); });
+ *         }
+ *
+ *
+ * 4) To connect to an OIS host (e.g. game) via Serial:
+ *  4.1) Enumerate the available serial ports as described above in 2.1.
+ *  4.2) For any ports that you want to attempt connection on:
+ *       Create a OisPortSerial object using the `path` member from the enumerated port list.
+ *       Create a OisHost object using this OisPortSerial object.
+ *  4.3) Call `AddEvent` / `AddInput` / `AddOutput` to register the named variables that your controller will work with.
+ *       N.B. to be compatible with a protocol version 1 host, this must be done before the first call to `Poll`.
+ *  4.4) Frequently call the `Poll` member function of your OisDevice objects.
+ *       All communication will occur during these calls.
+ *  4.5) Use `Connected`, `GetProtocolVersion`, `GetGameVersion`, `GetGameName` to check the connection status.
+ *  4.6) If connected to a protocol version 2+ host, `AddEvent` / `AddInput` / `AddOutput` (and `Remove` versions)
+ *        may be used at any time during the connection. Under protocol version 1, these functions will cause disconnection.
+ *  4.7) To receive values from the host, inspect the `DeviceInputs` list to see the registered inputs.
+ *       Inspect the `value` and `type` members to retrieve new values.
+ *       (N.B. NumericInputs are for values that are sent from Host -> Device)
+ *  4.8) To send values to the host, inspect the `DeviceOutputs` list to see the registered outputs.
+ *       Call SetOutputt to send input values to the host.
+ *       (N.B. NumericOutputs are for values that are sent from Device -> Host)
+ *  4.9) To send named events from the host, inspect the `DeviceEvents` list to see the registered events.
+ *       Call `Activate` to trigger a named event on the host.
+ *  
+ */
+
 
 
 //------------------------------------------------------------------------------
@@ -130,25 +247,37 @@ private:
 };
 #endif
 
+
+//------------------------------------------------------------------------------
+// If you do NOT want to use our bundled SerialPort class, define OIS_NO_SERIAL_PORT.
+//------------------------------------------------------------------------------
+#ifndef OIS_NO_SERIAL_PORT
+# ifdef OIS_DEVICE_IMPL
+#  define OIS_SERIALPORT_IMPL
+# endif
+# include "serialport.hpp"
+#endif
+
 //------------------------------------------------------------------------------
 // If you want to use your own communication method, define OIS_PORT to your own class.
 // If not defined, we will include the bundled SerialPort class.
 //------------------------------------------------------------------------------
 #ifndef OIS_PORT
-# include "serialport.hpp"
-# ifdef OIS_VIRTUAL_PORT
+# ifdef OIS_ENABLE_VIRTUAL_PORT
 #  define OIS_PORT IOisPort
-# else
+# elif defined OIS_SERIALPORT_INCLUDED
 #  define OIS_PORT SerialPort
+# else
+#  error "Please define OIS_PORT or OIS_ENABLE_VIRTUAL_PORT"
 # endif
 #endif
 
 
 
 //------------------------------------------------------------------------------
-// If you want to use multiple different communication methods, defining OIS_VIRTUAL_PORT will enable dynamic dispatch for communication functions.
+// If you want to use multiple different communication methods, defining OIS_ENABLE_VIRTUAL_PORT will enable dynamic dispatch for communication functions.
 // If the bundled SerialPort class was included, the OisPortSerial class is an adaptor to make SerialPort implement the IOisPort interface. 
-#ifdef OIS_VIRTUAL_PORT
+#ifdef OIS_ENABLE_VIRTUAL_PORT
 class IOisPort
 {
 public:
@@ -235,7 +364,9 @@ public:
 		OIS_STRING  name;
 		NumericType type;
 	};
+
 protected:
+	//Shared implementation details
 	struct ChannelIndex
 	{
 		uint16_t channel;
@@ -341,35 +472,25 @@ protected:
 	OIS_VECTOR<NumericValue> m_numericInputs;
 	OIS_VECTOR<NumericValue> m_numericOutputs;
 	OIS_VECTOR<Event>        m_events;
-
-	OIS_PORT& m_port;
-	OIS_STRING m_deviceName;
-
-	OIS_STRING m_gameName;
-	unsigned m_gameVersion = 0;
-
-	unsigned m_protocolVersion = 1;
-	uint32_t m_pid = 0;
-	uint32_t m_vid = 0;
-	DeviceState m_connectionState = Handshaking;
-	unsigned m_commandLength = 0;
-	char m_commandBuffer[OIS_MAX_COMMAND_LENGTH * 2];
-	bool     m_binary = false;
+	OIS_PORT&                m_port;
+	OIS_STRING               m_deviceName;
+	OIS_STRING               m_gameName;
+	unsigned                 m_gameVersion = 0;
+	unsigned                 m_protocolVersion = 1;
+	uint32_t                 m_pid = 0;
+	uint32_t                 m_vid = 0;
+	DeviceState              m_connectionState = Handshaking;
+	unsigned                 m_commandLength = 0;
+	char                     m_commandBuffer[OIS_MAX_COMMAND_LENGTH * 2];
+	bool                     m_binary = false;
 
 	OisBase(OIS_PORT& port, const OIS_STRING& name, unsigned gameVersion, const char* gameName)
-		: m_port(port)
-		, m_deviceName(name)
-		, m_gameVersion(gameVersion)
-		, m_gameName(gameName)
+		: m_port(port), m_deviceName(name), m_gameVersion(gameVersion), m_gameName(gameName)
 	{
 		_ClearState();
 	}
-
 	OisBase(OIS_PORT& port, const OIS_STRING& name, uint32_t pid, uint32_t vid)
-		: m_port(port)
-		, m_deviceName(name)
-		, m_pid(pid)
-		, m_vid(vid)
+		: m_port(port), m_deviceName(name), m_pid(pid), m_vid(vid)
 	{
 		_ClearState();
 	}
@@ -420,10 +541,11 @@ public:
 	{
 	}
 
-	const OIS_STRING& GetGameName()    const { return m_gameName; }
-	unsigned          GetGameVersion() const { return m_gameVersion; }
-	bool              Connecting()     const { return m_connectionState != Handshaking; }
-	bool              Connected()      const { return m_connectionState == Active; }
+	const OIS_STRING& GetGameName()        const { return m_gameName; }
+	unsigned          GetGameVersion()     const { return m_gameVersion; }
+	bool              Connecting()         const { return m_connectionState != Handshaking; }
+	bool              Connected()          const { return m_connectionState == Active; }
+	unsigned          GetProtocolVersion() const { return m_protocolVersion; }
 
 	const OIS_VECTOR<NumericValue>& DeviceInputs()  const { return m_numericInputs; }
 	const OIS_VECTOR<NumericValue>& DeviceOutputs() const { return m_numericOutputs; }
