@@ -751,9 +751,9 @@ void ois_send_pid(OisState& ois)
   IF_ASCII
   {
     Serial.print("PID=");
-    Serial.print(ois.pid);
+    Serial.print(ois.pid, HEX);
     Serial.print(",");
-    Serial.print(ois.vid);
+    Serial.print(ois.vid, HEX);
     Serial.print(",");
     Serial.println(ois.deviceName);
   }

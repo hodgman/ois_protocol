@@ -120,7 +120,7 @@ static void UpdateDevice( OisDeviceEx& d )
 	});
 }
 
-void InputOis_Update( std::vector<OisDeviceEx*>& devices )
+void InputOis_Update( std::vector<OisDeviceEx*>& devices, float deltaTime )
 {
 	if( !g_websockets )
 		return;

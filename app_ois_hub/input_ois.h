@@ -22,7 +22,7 @@ struct OisDeviceEx
 };
 
 void InputOis_Init();
-void InputOis_Update( std::vector<OisDeviceEx*>& devices );
+void InputOis_Update( std::vector<OisDeviceEx*>& devices, float deltaTime );
 void InputOis_Shutdown();
 
 void InputOis_Connect(const PortName&);

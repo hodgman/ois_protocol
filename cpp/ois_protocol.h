@@ -135,8 +135,8 @@ const static unsigned OIS_MAX_NAME_LENGTH = 120;
 
 //------------------------------------------------------------------------------
 // The internal command buffer size can be overridden by defining OIS_MAX_COMMAND_LENGTH.
-#ifndef OIS_MAX_COMMAND_LENGTH //              NIF= 65535, VERY_LONG_ASCII_NAME \0
-const static unsigned OIS_MAX_COMMAND_LENGTH = 4    +6     +OIS_MAX_NAME_LENGTH +1;
+#ifndef OIS_MAX_COMMAND_LENGTH //              PID=baadfood,deadbeef,VERY_LONG_ASCII_NAME \0
+const static unsigned OIS_MAX_COMMAND_LENGTH = 4   +9       +9       +OIS_MAX_NAME_LENGTH +1;
 #endif
 
 //------------------------------------------------------------------------------
@@ -266,7 +266,7 @@ private:
 
 //------------------------------------------------------------------------------
 // If you want to use your own communication method, define OIS_PORT to your own class.
-// If not defined, we will include the bundled SerialPort class.
+// If not defined, we will use a virtual interface or the bundled SerialPort class.
 //------------------------------------------------------------------------------
 #ifndef OIS_PORT
 # ifdef OIS_ENABLE_VIRTUAL_PORT
@@ -380,7 +380,6 @@ protected:
 	};
 	enum CommandsAscii
 	{
-		//v1 commands
 		SYN = OIS_FOURCC("SYN="),
 		CMD = OIS_FOURCC("CMD="),
 		NIB = OIS_FOURCC("NIB="),
@@ -389,7 +388,10 @@ protected:
 		ACT = OIS_FOURCC("ACT\0"),
 		EXC = OIS_FOURCC("EXC="),
 		DBG = OIS_FOURCC("DBG="),
-		//v2 commands
+		DEN = OIS_FOURCC("DEN\0"),
+		_452 = OIS_FOURCC("452\r"),
+		ACK1 = OIS_FOURCC("ACK\0"),
+		ACK2 = OIS_FOURCC("ACK="),
 		NOB = OIS_FOURCC("NOB="),
 		NON = OIS_FOURCC("NON="),
 		NOF = OIS_FOURCC("NOF="),
@@ -467,7 +469,7 @@ protected:
 	bool ReadCommands();
 	void ProcessCommands();
 	void SendData(const uint8_t* cmd, int length);
-	void SendText(const char* cmd);
+	void SendText(const char* cmd, bool includeNullTerminator=false);
 	void SendValue(const NumericValue& v, OIS_STRING_BUILDER& sb, unsigned PAYLOAD_SHIFT, unsigned VAL_1, unsigned VAL_2, unsigned VAL_3, unsigned VAL_4);
 	void ConnectAndPoll();
 	bool ExpectState(DeviceStateMask state, const char* cmd, unsigned version);
@@ -482,7 +484,7 @@ protected:
 	OIS_STRING               m_deviceName;
 	OIS_STRING               m_gameName;
 	unsigned                 m_gameVersion = 0;
-	unsigned                 m_protocolVersion = 1;
+	unsigned                 m_protocolVersion = 0;
 	uint32_t                 m_pid = 0;
 	uint32_t                 m_vid = 0;
 	DeviceState              m_connectionState = Handshaking;
@@ -557,7 +559,7 @@ public:
 	const OIS_VECTOR<NumericValue>& DeviceOutputs() const { return m_numericOutputs; }
 	const OIS_VECTOR<Event>&        DeviceEvents()  const { return m_events; }
 
-	void Poll(OIS_STRING_BUILDER&);
+	void Poll(OIS_STRING_BUILDER&, float deltaTime);
 
 	uint16_t AddEvent(const OIS_STRING& name);
 	uint16_t AddInput(const OIS_STRING& name, NumericType type);
@@ -578,10 +580,14 @@ private:
 	void ClearState();
 	bool ProcessAscii(char* cmd, OIS_STRING_BUILDER&);
 	int  ProcessBinary(char* start, char* end);
+	
+	void SendHandshake(OIS_STRING_BUILDER&, float deltaTime);
+	void SendSync(OIS_STRING_BUILDER&);
 
 	OIS_VECTOR<ChannelIndex> m_queuedInputToggles;
 	OIS_VECTOR<ChannelIndex> m_queuedOutputs;
 	OIS_VECTOR<ChannelIndex> m_eventBuffer;
+	float                    m_handshakeTimer = 0;
 };
 
 
@@ -615,9 +621,9 @@ void OisBase<T>::SendData(const uint8_t* cmd, int length)
 }
 
 template<class T>
-void OisBase<T>::SendText(const char* cmd)
+void OisBase<T>::SendText(const char* cmd, bool includeNullTerminator)
 {
-	m_port.Write(cmd, (int)strlen(cmd));
+	m_port.Write(cmd, (int)strlen(cmd) + (includeNullTerminator ? 1 : 0));
 }
 
 template<class T>
@@ -1153,8 +1159,8 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 				char* pid = payload;
 				char* vid = ZeroDelimiter(pid, ',');
 				char* name = ZeroDelimiter(vid, ',');
-				m_pid = atoi(pid);
-				m_vid = atoi(vid);
+				m_pid = strtol(pid, NULL, 16);
+				m_vid = strtol(vid, NULL, 16);
 				m_deviceNameOverride = name;
 				OIS_INFO( "<- PID: %d/%d %s", m_pid, m_vid, name );
 				break;
@@ -1275,9 +1281,137 @@ void OisDevice::ClearState()
 
 //------------------------------------------------------------------------------
 
-void OisHost::Poll(OIS_STRING_BUILDER& sb)
+void OisHost::SendHandshake(OIS_STRING_BUILDER& sb, float deltaTime)
+{
+	m_handshakeTimer -= deltaTime;
+	if( m_handshakeTimer > 0 )
+		return;
+	m_handshakeTimer = 1;
+
+	if( m_protocolVersion == 0 )
+		m_protocolVersion = 2;
+
+	SendText("451\n");
+	const char* suffix = "";
+	if( m_protocolVersion >= 2 )
+		suffix = ",B";
+	SendText(sb.FormatTemp("SYN=%d%s\n", m_protocolVersion, suffix));
+}
+
+void OisHost::SendSync(OIS_STRING_BUILDER& sb)
+{
+	if( m_binary )
+	{
+		if( m_protocolVersion >= 2 )
+		{
+			uint8_t data[9];
+			data[0] = OisState::CL_PID;
+			data[1] = (uint8_t)(m_pid);
+			data[2] = (uint8_t)(m_pid>>8);
+			data[3] = (uint8_t)(m_pid>>16);
+			data[4] = (uint8_t)(m_pid>>24);
+			data[5] = (uint8_t)(m_vid);
+			data[6] = (uint8_t)(m_vid>>8);
+			data[7] = (uint8_t)(m_vid>>16);
+			data[8] = (uint8_t)(m_vid>>24);
+			SendData(data, 9);
+			SendText(m_deviceName.c_str(), true);
+		}
+			
+		for( const Event& e : m_events )
+		{
+			uint8_t data[3];
+			data[0] = CL_CMD;
+			data[1] = (uint8_t)(e.channel);
+			data[2] = (uint8_t)(e.channel>>8);
+			SendData(data, 3);
+			SendText(e.name.c_str(), true);
+		}
+
+		for( const NumericValue& v : m_numericInputs )
+		{
+			uint8_t data[3];
+			data[0] = OisState::CL_NIO | 
+				(v.type==Number   ? OisState::CL_N_PAYLOAD_N : 
+				(v.type==Fraction ? OisState::CL_N_PAYLOAD_F : 0));
+			data[1] = (uint8_t)(v.channel);
+			data[2] = (uint8_t)(v.channel>>8);
+			SendData(data, 3);
+			SendText(v.name.c_str(), true);
+		}
+
+		if( m_protocolVersion >= 2 )
+		{
+			for( const NumericValue& v : m_numericOutputs )
+			{
+				uint8_t data[3];
+				data[0] = OisState::CL_NIO | OisState::CL_N_PAYLOAD_O | 
+					(v.type==Number   ? OisState::CL_N_PAYLOAD_N :
+					(v.type==Fraction ? OisState::CL_N_PAYLOAD_F : 0));
+				data[1] = (uint8_t)(v.channel);
+				data[2] = (uint8_t)(v.channel>>8);
+				SendData(data, 3);
+				SendText(v.name.c_str(), true);
+			}
+		}
+
+		uint8_t data[1];
+		data[0] = CL_ACT;
+		SendData(data, 1);
+	}
+	else
+	{
+		if( m_protocolVersion >= 2 )
+			SendText(sb.FormatTemp("PID=%x,%x,%s\n", m_pid, m_vid, m_deviceName.c_str()));
+			
+		for( const Event& e : m_events )
+		{
+			SendText(sb.FormatTemp("CMD=%s,%d\n", e.name.c_str(), e.channel));
+		}
+
+		for( const NumericValue& v : m_numericInputs )
+		{
+			switch( v.type )
+			{
+			case Boolean:  SendText("NIB="); break;
+			case Number:   SendText("NIN="); break;
+			case Fraction: SendText("NIF="); break;
+			}
+			SendText(sb.FormatTemp("%s,%d\n", v.name.c_str(), v.channel));
+		}
+
+		if( m_protocolVersion >= 2 )
+		{
+			for( const NumericValue& v : m_numericOutputs )
+			{
+				switch( v.type )
+				{
+				case Boolean:  SendText("NOB="); break;
+				case Number:   SendText("NON="); break;
+				case Fraction: SendText("NOF="); break;
+				}
+				SendText(sb.FormatTemp("%s,%d\n", v.name.c_str(), v.channel));
+			}
+		}
+
+		SendText("ACT\n");
+	}
+	m_connectionState = Active;
+}
+
+void OisHost::Poll(OIS_STRING_BUILDER& sb, float deltaTime)
 {
 	ConnectAndPoll();
+
+	if( m_connectionState == Handshaking )
+	{
+		return SendHandshake(sb, deltaTime);
+	}
+	else if( m_connectionState == Synchronisation )
+	{
+		return SendSync(sb);
+	}
+	OIS_ASSERT( m_connectionState == Active );
 
 	for (ChannelIndex index : m_queuedInputToggles)
 	{
@@ -1439,6 +1573,13 @@ bool OisHost::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 	if (cmd[1] && cmd[2])
 		type = OIS_FOURCC(cmd);
 	bool isKeyVal = 0 != isdigit(cmd[0]);
+	
+	if( cmd[0] == '4' && cmd[1] == '5' && cmd[2] == '2'  && cmd[3] == '\r' )
+	{
+		type = _452;
+		isKeyVal = false;
+	}
+
 	if (isKeyVal)
 	{
 		if (!ExpectState(1 << Active, cmd, 2))
@@ -1469,11 +1610,39 @@ bool OisHost::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 				OIS_WARN( "Unknown command: %s", cmd);
 				break;
 			}
+			case DEN:
+			{
+				int nextProtocolAttempt;
+				if( m_protocolVersion > 0 )
+					nextProtocolAttempt = m_protocolVersion - 1;
+				else
+					nextProtocolAttempt = 2;
+				ClearState();
+				m_protocolVersion = nextProtocolAttempt;
+				break;
+			}
+			case _452:
+			case ACK1:
+			{
+				m_protocolVersion = 1;
+				m_connectionState = Synchronisation;
+				break;
+			}
+			case ACK2:
+			{
+				m_gameName = ZeroDelimiter(payload, ',');
+				m_gameVersion = atoi(payload);
+				m_binary = true;
+				m_connectionState = OisState::Synchronisation;
+				break;
+			}
 			case END:
 			{
 				OIS_INFO( "<- END");
 				if( m_connectionState != Handshaking )
+				{ 
 					ClearState();
+				}
 				m_port.Disconnect();
 				break;
 			}
@@ -1541,7 +1710,7 @@ bool OisHost::ToggleInput(uint16_t channel, bool active)
 void OisHost::ClearState()
 {
 	m_connectionState = Handshaking;
-	m_protocolVersion = 1;
+	m_protocolVersion = 0;
 	m_binary = false;
 	m_gameVersion = 0;
 	m_gameName = "";
@@ -1549,6 +1718,7 @@ void OisHost::ClearState()
 	m_queuedInputToggles.clear();
 	m_queuedOutputs.clear();
 	m_eventBuffer.clear();
+	m_handshakeTimer = 0;
 }
 
 //------------------------------------------------------------------------------

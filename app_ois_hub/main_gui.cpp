@@ -6,6 +6,7 @@
 #include <string.h>
 #include <time.h>
 #include <limits.h>
+#include <chrono>
 
 #include "input_ois.h"
 
@@ -400,6 +401,9 @@ void RunDemoGui()
 	InputOis_Init();
 	
 	std::vector<OisDeviceEx*> devices;
+	
+	auto time = std::chrono::steady_clock::now();
+	float deltaTime = 0;
 	while( running )
 	{
 		MSG msg;
@@ -413,7 +417,7 @@ void RunDemoGui()
 		}
 		nk_input_end( ctx );
 		
-		InputOis_Update( devices );
+		InputOis_Update( devices, deltaTime );
 
 		DrawGui( ctx, devices );
 		
@@ -421,6 +425,11 @@ void RunDemoGui()
 
 		Sleep(1);
 		devices.clear();
+		
+		auto end = std::chrono::steady_clock::now();
+        std::chrono::duration<float> diff = end-time;
+		deltaTime = diff.count();
+		time = end;
 	}
 	
 	InputOis_Shutdown();
