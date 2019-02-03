@@ -204,6 +204,23 @@ const static unsigned OIS_MAX_COMMAND_LENGTH = 4   +9       +9       +OIS_MAX_NA
 #endif
 
 //------------------------------------------------------------------------------
+// If you want use use your own swap function, define OIS_SWAP to your own function.
+#ifndef OIS_SWAP
+# include <utility>
+# define OIS_SWAP std::swap
+#endif
+
+//------------------------------------------------------------------------------
+// If your vector has a swap-and-pop type function, you can define OIS_ERASE_UNORDERED to use it.
+#ifndef OIS_ERASE_UNORDERED
+# define OIS_ERASE_UNORDERED(vec, element) \
+	do {                                   \
+		OIS_SWAP(element, vec.back());     \
+		vec.pop_back();                    \
+	} while(0)                             //
+#endif
+
+//------------------------------------------------------------------------------
 // If you want use use your own string builder, define OIS_STRING_BUILDER to your own class that implements the interface below.
 // FormatTemp, AllocTemp use char-buffers that are owned by the OIS_STRING_BUILDER object:
 //   The lifetime of these allocations is as long as this OIS_STRING_BUILDER object, 
@@ -577,6 +594,32 @@ public:
 	bool ToggleInput(uint16_t inputChannel, bool active);
 private:
 	friend class OisBase<OisHost>;
+	
+	struct ChannelChange
+	{
+		uint16_t channel;
+		enum Type : uint8_t
+		{
+			Event,
+			Input,
+			Output,
+		} type;
+		enum Life : uint8_t
+		{
+			Removed,
+			Added,
+		} life;
+	};
+	OIS_VECTOR<ChannelChange> m_channelChanges;
+
+	OIS_VECTOR<ChannelIndex> m_queuedInputToggles;
+	OIS_VECTOR<ChannelIndex> m_queuedOutputs;
+	OIS_VECTOR<ChannelIndex> m_eventBuffer;
+	float                    m_handshakeTimer = 0;
+	
+	uint16_t                 m_nextChannel = 0;
+	OIS_VECTOR<uint16_t>     m_channelFreeList;
+	
 	void ClearState();
 	bool ProcessAscii(char* cmd, OIS_STRING_BUILDER&);
 	int  ProcessBinary(char* start, char* end);
@@ -584,10 +627,12 @@ private:
 	void SendHandshake(OIS_STRING_BUILDER&, float deltaTime);
 	void SendSync(OIS_STRING_BUILDER&);
 
-	OIS_VECTOR<ChannelIndex> m_queuedInputToggles;
-	OIS_VECTOR<ChannelIndex> m_queuedOutputs;
-	OIS_VECTOR<ChannelIndex> m_eventBuffer;
-	float                    m_handshakeTimer = 0;
+	void SendRegistration(OIS_STRING_BUILDER&, const NumericValue&, bool output);
+	void SendRegistration(OIS_STRING_BUILDER&, const Event&);
+	void SendUnregistration(OIS_STRING_BUILDER&, uint16_t channel, ChannelChange::Type);
+
+	uint16_t AddChannel(ChannelChange::Type);
+	void     RemoveChannel(uint16_t, ChannelChange::Type);
 };
 
 
@@ -728,10 +773,11 @@ bool OisBase<T>::ExpectState(DeviceStateMask state, const char* cmd, unsigned ve
 	if (badState)
 	{
 		OIS_WARN("Did not expect command at this time: %s", cmd);
-		if (m_connectionState == Handshaking)
+		if (m_connectionState != Handshaking)
 		{
 			_ClearState();
-			SendText("END\n");
+			if (m_protocolVersion >= 2)
+				SendText("END\n");
 		}
 		return false;
 	}
@@ -1298,11 +1344,83 @@ void OisHost::SendHandshake(OIS_STRING_BUILDER& sb, float deltaTime)
 	SendText(sb.FormatTemp("SYN=%d%s\n", m_protocolVersion, suffix));
 }
 
-void OisHost::SendSync(OIS_STRING_BUILDER& sb)
+void OisHost::SendRegistration(OIS_STRING_BUILDER& sb, const NumericValue& v, bool output)
 {
 	if( m_binary )
 	{
-		if( m_protocolVersion >= 2 )
+		uint8_t data[3];
+		data[0] = OisState::CL_NIO | 
+			(output ? OisState::CL_N_PAYLOAD_O : 0) | 
+			(v.type==Number   ? OisState::CL_N_PAYLOAD_N :
+			(v.type==Fraction ? OisState::CL_N_PAYLOAD_F : 0));
+		data[1] = (uint8_t)(v.channel);
+		data[2] = (uint8_t)(v.channel>>8);
+		SendData(data, 3);
+		SendText(v.name.c_str(), true);
+	}
+	else
+	{
+		if( output )
+		{
+			switch( v.type )
+			{
+			case Boolean:  SendText("NOB="); break;
+			case Number:   SendText("NON="); break;
+			case Fraction: SendText("NOF="); break;
+			}
+		}
+		else
+		{
+			switch( v.type )
+			{
+			case Boolean:  SendText("NIB="); break;
+			case Number:   SendText("NIN="); break;
+			case Fraction: SendText("NIF="); break;
+			}
+		}
+		SendText(sb.FormatTemp("%s,%d\n", v.name.c_str(), v.channel));
+	}
+}
+
+void OisHost::SendUnregistration(OIS_STRING_BUILDER& sb, uint16_t channel, ChannelChange::Type type)
+{
+	OIS_ASSERT( false && "todo - implement this" );
+	if( m_binary )
+	{
+	}
+	else
+	{
+		switch( type )
+		{
+		default: OIS_ASSUME(false);
+		case ChannelChange::Event:
+		case ChannelChange::Input:
+		case ChannelChange::Output:
+			break;
+		}
+	}
+}
+
+void OisHost::SendRegistration(OIS_STRING_BUILDER& sb, const Event& e)
+{
+	if( m_binary )
+	{
+		uint8_t data[3];
+		data[0] = CL_CMD;
+		data[1] = (uint8_t)(e.channel);
+		data[2] = (uint8_t)(e.channel>>8);
+		SendData(data, 3);
+		SendText(e.name.c_str(), true);
+	}
+	else
+		SendText(sb.FormatTemp("CMD=%s,%d\n", e.name.c_str(), e.channel));
+}
+
+void OisHost::SendSync(OIS_STRING_BUILDER& sb)
+{
+	if( m_protocolVersion >= 2 )
+	{
+		if( m_binary )
 		{
 			uint8_t data[9];
 			data[0] = OisState::CL_PID;
@@ -1317,85 +1435,33 @@ void OisHost::SendSync(OIS_STRING_BUILDER& sb)
 			SendData(data, 9);
 			SendText(m_deviceName.c_str(), true);
 		}
+		else
+			SendText(sb.FormatTemp("PID=%x,%x,%s\n", m_pid, m_vid, m_deviceName.c_str()));
+	}
 			
-		for( const Event& e : m_events )
-		{
-			uint8_t data[3];
-			data[0] = CL_CMD;
-			data[1] = (uint8_t)(e.channel);
-			data[2] = (uint8_t)(e.channel>>8);
-			SendData(data, 3);
-			SendText(e.name.c_str(), true);
-		}
+	for( const Event& e : m_events )
+		SendRegistration(sb, e);
 
-		for( const NumericValue& v : m_numericInputs )
-		{
-			uint8_t data[3];
-			data[0] = OisState::CL_NIO | 
-				(v.type==Number   ? OisState::CL_N_PAYLOAD_N : 
-				(v.type==Fraction ? OisState::CL_N_PAYLOAD_F : 0));
-			data[1] = (uint8_t)(v.channel);
-			data[2] = (uint8_t)(v.channel>>8);
-			SendData(data, 3);
-			SendText(v.name.c_str(), true);
-		}
+	for( const NumericValue& v : m_numericInputs )
+		SendRegistration(sb, v, false);
 
-		if( m_protocolVersion >= 2 )
-		{
-			for( const NumericValue& v : m_numericOutputs )
-			{
-				uint8_t data[3];
-				data[0] = OisState::CL_NIO | OisState::CL_N_PAYLOAD_O | 
-					(v.type==Number   ? OisState::CL_N_PAYLOAD_N :
-					(v.type==Fraction ? OisState::CL_N_PAYLOAD_F : 0));
-				data[1] = (uint8_t)(v.channel);
-				data[2] = (uint8_t)(v.channel>>8);
-				SendData(data, 3);
-				SendText(v.name.c_str(), true);
-			}
-		}
+	if( m_protocolVersion >= 2 )
+	{
+		for( const NumericValue& v : m_numericOutputs )
+			SendRegistration(sb, v, true);
+	}
 
+	m_channelChanges.clear();
+	
+	if( m_binary )
+	{
 		uint8_t data[1];
 		data[0] = CL_ACT;
 		SendData(data, 1);
 	}
 	else
-	{
-		if( m_protocolVersion >= 2 )
-			SendText(sb.FormatTemp("PID=%x,%x,%s\n", m_pid, m_vid, m_deviceName.c_str()));
-			
-		for( const Event& e : m_events )
-		{
-			SendText(sb.FormatTemp("CMD=%s,%d\n", e.name.c_str(), e.channel));
-		}
-
-		for( const NumericValue& v : m_numericInputs )
-		{
-			switch( v.type )
-			{
-			case Boolean:  SendText("NIB="); break;
-			case Number:   SendText("NIN="); break;
-			case Fraction: SendText("NIF="); break;
-			}
-			SendText(sb.FormatTemp("%s,%d\n", v.name.c_str(), v.channel));
-		}
-
-		if( m_protocolVersion >= 2 )
-		{
-			for( const NumericValue& v : m_numericOutputs )
-			{
-				switch( v.type )
-				{
-				case Boolean:  SendText("NOB="); break;
-				case Number:   SendText("NON="); break;
-				case Fraction: SendText("NOF="); break;
-				}
-				SendText(sb.FormatTemp("%s,%d\n", v.name.c_str(), v.channel));
-			}
-		}
-
 		SendText("ACT\n");
-	}
+
 	m_connectionState = Active;
 }
 
@@ -1413,7 +1479,54 @@ void OisHost::Poll(OIS_STRING_BUILDER& sb, float deltaTime)
 	}
 	OIS_ASSERT( m_connectionState == Active );
 
-	for (ChannelIndex index : m_queuedInputToggles)
+	if( !m_channelChanges.empty() )
+	{
+		if( m_protocolVersion < 2 )
+		{
+			OIS_WARN("Adding or Removing registrations during the Active phase is not compatible in protocol version 1. Disconnecting");
+			ClearState();
+			m_port.Disconnect();
+		}
+		for( ChannelChange& change : m_channelChanges )
+		{
+			if( change.life == ChannelChange::Added )
+			{
+				switch( change.type )
+				{
+					default: OIS_ASSUME(false);
+					case ChannelChange::Event:
+					{
+						Event* e = FindChannel(m_events, change.channel);
+						if( e )
+							SendRegistration(sb, *e);
+						break;
+					}
+					case ChannelChange::Input:
+					{
+						NumericValue* v = FindChannel(m_numericInputs, change.channel);
+						if( v )
+							SendRegistration(sb, *v, false);
+						break;
+					}
+					case ChannelChange::Output:
+					{
+						NumericValue* v = FindChannel(m_numericOutputs, change.channel);
+						if( v )
+							SendRegistration(sb, *v, true);
+						break;
+					}
+				}
+			}
+			else
+			{
+				OIS_ASSERT( change.life == ChannelChange::Removed );
+				SendUnregistration(sb, change.channel, change.type);
+			}
+		}
+		m_channelChanges.clear();
+	}
+
+	for (ChannelIndex& index : m_queuedInputToggles)
 	{
 		const NumericValue* v = FindChannel(m_numericInputs, index);
 		if (!v)
@@ -1427,12 +1540,10 @@ void OisHost::Poll(OIS_STRING_BUILDER& sb, float deltaTime)
 			SendData(cmd, 3);
 		}
 		else
-		{
 			SendText(sb.FormatTemp("TNI=%d,%d\n", v->channel, v->active ? 1 : 0));
-		}
 	}
 
-	for (ChannelIndex index : m_queuedOutputs)
+	for (ChannelIndex& index : m_queuedOutputs)
 	{
 		const NumericValue* v = FindChannel(m_numericOutputs, index);
 		if (!v)
@@ -1447,7 +1558,7 @@ void OisHost::Poll(OIS_STRING_BUILDER& sb, float deltaTime)
 	}
 	m_queuedOutputs.clear();
 
-	for (ChannelIndex index : m_eventBuffer)
+	for (ChannelIndex& index : m_eventBuffer)
 	{
 		const Event* e = FindChannel(m_events, index);
 		if (!e)
@@ -1651,6 +1762,87 @@ bool OisHost::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 	return true;
 }
 
+
+uint16_t OisHost::AddChannel(ChannelChange::Type type)
+{
+	uint16_t ch;
+	if( m_channelFreeList.empty() )
+	{
+		OIS_ASSERT( m_nextChannel < 65535 );
+		ch = m_nextChannel++;
+	}
+	else
+	{
+		ch = m_channelFreeList.back();
+		m_channelFreeList.pop_back();
+	}
+	if( m_connectionState == Active )
+		m_channelChanges.push_back({ch, type, ChannelChange::Added});
+	return ch;
+}
+
+void OisHost::RemoveChannel(uint16_t ch, ChannelChange::Type type)
+{
+	m_channelFreeList.push_back(ch);
+	if( m_connectionState == Active )
+		m_channelChanges.push_back({ch, type, ChannelChange::Removed});
+}
+
+uint16_t OisHost::AddEvent(const OIS_STRING& name)
+{
+	uint16_t ch = AddChannel(ChannelChange::Event);
+	m_events.push_back({ch, name});
+	return ch;
+}
+
+uint16_t OisHost::AddInput(const OIS_STRING& name, NumericType type)
+{
+	uint16_t ch = AddChannel(ChannelChange::Input);
+	Value value;
+	value.number = 0;
+	m_numericInputs.push_back({name, ch, true, type, value});
+	return ch;
+}
+
+uint16_t OisHost::AddOutput(const OIS_STRING& name, NumericType type)
+{
+	uint16_t ch = AddChannel(ChannelChange::Output);
+	Value value;
+	value.number = 0;
+	m_numericOutputs.push_back({name, ch, true, type, value});
+	return ch;
+}
+
+bool OisHost::RemoveEvent(uint16_t channel)
+{
+	Event* e = FindChannel(m_events, channel);
+	if( !e )
+		return false;
+	OIS_ERASE_UNORDERED(m_events, *e);
+	RemoveChannel(channel, ChannelChange::Event);
+	return true;
+}
+
+bool OisHost::RemoveInput(uint16_t channel)
+{
+	NumericValue* e = FindChannel(m_numericInputs, channel);
+	if( !e )
+		return false;
+	OIS_ERASE_UNORDERED(m_numericInputs, *e);
+	RemoveChannel(channel, ChannelChange::Input);
+	return true;
+}
+
+bool OisHost::RemoveOutput(uint16_t channel)
+{
+	NumericValue* e = FindChannel(m_numericOutputs, channel);
+	if( !e )
+		return false;
+	OIS_ERASE_UNORDERED(m_numericOutputs, *e);
+	RemoveChannel(channel, ChannelChange::Output);
+	return true;
+}
+
 bool OisHost::Activate(const Event& event)
 {
 	if (m_events.empty())
@@ -1719,6 +1911,7 @@ void OisHost::ClearState()
 	m_queuedOutputs.clear();
 	m_eventBuffer.clear();
 	m_handshakeTimer = 0;
+	m_channelChanges.clear();
 }
 
 //------------------------------------------------------------------------------
