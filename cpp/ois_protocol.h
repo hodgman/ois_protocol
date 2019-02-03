@@ -27,6 +27,7 @@
  *    ╚══════╝...╚═╝...╚══════╝...╚═╝...╚══════╝╚═╝.....╚═╝.........
  *    ..............................................................
  *
+ *------------------------------------------------------------------------------
  *   Copyright (c) 2018-2019
  *  
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -46,12 +47,17 @@
  *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *  SOFTWARE.
+ *------------------------------------------------------------------------------
+ *
+ * If you're looking to make an Arduino-based controller, then this C++ implementation is not the one you want.
+ * There is a slimmer / Arduino-focussed implementation in the `arduino` directory of this project.
+ *
  *
  * 1) Integration / general usage:
  *  1.1) Define any OIS_* macros to configure the library to your purposes.
- *     Make sure that every file that includes oisdevice.h uses the same combination of OIS_* macros!
- *  1.2) In ONE of your cpp files, Define OIS_DEVICE_IMPL
- *  1.3) Include oisdevice.h
+ *     Make sure that every file that includes ois_protocol.h uses the same combination of OIS_* macros!
+ *  1.2) In ONE of your cpp files, Define OIS_PROTOCOL_IMPL
+ *  1.3) Include ois_protocol.h
  *
  *
  * 2) To connect to OIS devices (controllers) via Serial (COM) ports:
@@ -78,7 +84,7 @@
  *
  * 3) To connect to OIS devices (controllers) via Websockets:
  *  3.1) Add webby/webby.c to your project. This is a simple web server library.
- *  3.2) After including oisdevice.h, also include ois_webby.h.
+ *  3.2) After including ois_protocol.h, also include ois_webby.h.
  *  3.3) Create an OisWebHost object - this is a wrapper around a WebbyServer.
  *  3.4) Frequently call the `Poll` member function of your OisWebHost object.
  *       Frequencly call the `Connections` member function of your OisWebHost object
@@ -252,7 +258,7 @@ private:
 // If you do NOT want to use our bundled SerialPort class, define OIS_NO_SERIAL_PORT.
 //------------------------------------------------------------------------------
 #ifndef OIS_NO_SERIAL_PORT
-# ifdef OIS_DEVICE_IMPL
+# ifdef OIS_PROTOCOL_IMPL
 #  define OIS_SERIALPORT_IMPL
 # endif
 # include "serialport.hpp"
@@ -744,7 +750,7 @@ bool OisDevice::PopEvents(T& fn)
 }
 
 //------------------------------------------------------------------------------
-#ifdef OIS_DEVICE_IMPL
+#ifdef OIS_PROTOCOL_IMPL
 //------------------------------------------------------------------------------
 
 char* OisState::ZeroDelimiter(char* str, char delimiter)
@@ -1546,7 +1552,7 @@ void OisHost::ClearState()
 }
 
 //------------------------------------------------------------------------------
-#endif // OIS_DEVICE_IMPL
+#endif // OIS_PROTOCOL_IMPL
 //------------------------------------------------------------------------------
 
 #endif // OIS_DEVICE_INCLUDED

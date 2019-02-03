@@ -10,7 +10,7 @@ void OisLog( const char* category, const char* fmt, ... );
 #define OIS_ENABLE_ERROR_LOGGING 1
 #define OIS_ENABLE_VIRTUAL_PORT
 
-#include "../cpp/oisdevice.h"
+#include "../cpp/ois_protocol.h"
 
 struct OisDeviceEx
 {

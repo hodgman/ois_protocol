@@ -2,7 +2,7 @@
 void OisWebbyLog( const char* fmt, ... );
 #define OIS_WEBBY_INFO( fmt, ... ) OisWebbyLog(fmt, __VA_ARGS__);
 
-#define OIS_DEVICE_IMPL
+#define OIS_PROTOCOL_IMPL
 #include "input_ois.h"
 #include <algorithm>
 

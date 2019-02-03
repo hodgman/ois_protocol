@@ -85,7 +85,7 @@
     <ClCompile Include="output_vjoy.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\cpp\oisdevice.h" />
+    <ClInclude Include="..\cpp\ois_protocol.h" />
     <ClInclude Include="..\cpp\serialport.hpp" />
     <ClInclude Include="..\cpp\ois_webby.h" />
     <ClInclude Include="..\cpp\webby\webby.h" />

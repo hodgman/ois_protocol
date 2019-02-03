@@ -1,21 +1,121 @@
-#ifdef USB_JOYSTICK
-# include "joystick.h"
-#endif
+﻿/*** https://github.com/hodgman/ois_protocol
+ *      _____                                                                      
+ *     / ___ \                                                                     
+ *    | |   | | ____    ____  ____                                                 
+ *    | |   | ||  _ \  / _  )|  _ \                                                
+ *    | |___| || | | |( (/ / | | | |                                               
+ *     \_____/ | ||_/  \____)|_| |_|                                               
+ *     _____   |_|                                         _         _             
+ *    (_____)        _                               _    (_)       (_) _          
+ *      | |   ____  | |_   ____   ____  ____   ____ | |_   _  _   _  _ | |_  _   _ 
+ *      | |  |  _ \ |  _) / _  ) / ___)/ _  | / ___)|  _) | || | | || ||  _)| | | |
+ *     _| |_ | | | || |__( (/ / | |   ( ( | |( (___ | |__ | | \ V / | || |__| |_| |
+ *    (_____)|_| |_| \___)\____)|_|    \_||_| \____) \___)|_|  \_/  |_| \___)\__  |
+ *        _                                                                 (____/ 
+ *       | |                 _                                                     
+ *        \ \   _   _   ___ | |_   ____  ____                                      
+ *         \ \ | | | | /___)|  _) / _  )|    \                                     
+ *     _____) )| |_| ||___ || |__( (/ / | | | |                                    
+ *    (______/  \__  |(___/  \___)\____)|_|_|_|                                    
+ *             (____/   
+ *
+ *------------------------------------------------------------------------------
+ *   Copyright (c) 2018-2019
+ *  
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
+ *  
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
+ *  
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *------------------------------------------------------------------------------
+ *
+ * Integration / general usage:
+ *  1) Define any OIS_* macros to configure the library to your purposes.
+ *  2) Include ois_protocol.h
+ *  3) Create an OisState variable.
+ *       e.g. at global scope:
+ *         OisState ois;
+ *  4) Define a structure containing only `OisNumericInput` members. e.g.
+ *       struct 
+ *       {
+ *         OisNumericInput in1{"INPUT1", Number};
+ *         OisNumericInput in2{"INPUT2", Boolean};
+ *         OisNumericInput in3{"INPUT3", Fraction};
+ *       } inputs;
+ *  5) (Only for protocol version 2+)
+ *     Define a structure containing only `OisNumericOutput` members. e.g.
+ *       struct 
+ *       {
+ *         OisNumericOutput out1{"OUTPUT1", Number};
+ *         OisNumericOutput out2{"OUTPUT2", Boolean};
+ *         OisNumericOutput out3{"OUTPUT3", Fraction};
+ *       } outputs;
+ *  6) Define a structure containing only `OisCommand` members. e.g.
+ *       struct 
+ *       {
+ *         OisCommand cmd1{"COMMAND1"};
+ *         OisCommand cmd2{"COMMAND2"};
+ *       } commands;
+ *  7) In your `setup` function, call `ois_setup_structs`, e.g.
+ *       ois_setup_structs(ois, "Name", FOURCC("P_ID"), FOURCC("V_ID"), commands, inputs, outputs);
+ *     Choose a unique name, Product ID and Vendor ID for your controller.
+ *     Product/Vendor ID can be 32-bit numbers, or 4-character strings using the FOURCC macro.
+ *  8) In your `loop` function, call `ois_loop`. e.g.
+ *       ois_loop(ois);
+ *  9) To read an input variable from the host/game, use the variable names from step 4.
+ *       e.g. int input1 = inputs.in1;
+ * 10) To send an output variable to the host/game, call `ois_set` using the variable names from step 5.
+ *       e.g. ois_set(ois, outputs.out1, 42);
+ * 11) To trigger a command on the host/game, call `ois_execute` using the variable names from step 6.
+ *       e.g. ois_execute(ois, commands.cmd1);
+ */
 
+//------------------------------------------------------------------------------
+// Define OIS_BINARY as 0 to strip the code that implements the binary protocol
 #ifndef OIS_BINARY
 #define OIS_BINARY 1
 #endif
 
+//------------------------------------------------------------------------------
+// Define OIS_ASCII as 0 to strip the code that implements the ASCII protocol
 #ifndef OIS_ASCII
 #define OIS_ASCII 1
 #endif
 
+//------------------------------------------------------------------------------
+// Define OIS_MIN_VERSION and OIS_MAX_VERSION to strip the code that supporting newer/older protocol versions
 #ifndef OIS_MIN_VERSION
 #define OIS_MIN_VERSION 0
 #endif
 
 #ifndef OIS_MAX_VERSION
 #define OIS_MAX_VERSION 2
+#endif
+
+//------------------------------------------------------------------------------
+// The OIS protocol does not set a maximum length on the ASCII names of channels.
+// However, the implementation needs to define a fixed sized command buffer for practical reasons.
+// A sensible default size is chosen here, but you can override it by defining OIS_MAX_NAME_LENGTH.
+#ifndef OIS_MAX_NAME_LENGTH
+# define OIS_MAX_NAME_LENGTH = 120;
+#endif
+
+//------------------------------------------------------------------------------
+// The internal command buffer size can be overridden by defining OIS_MAX_COMMAND_LENGTH.
+#ifndef OIS_MAX_COMMAND_LENGTH //              NIF= 65535, VERY_LONG_ASCII_NAME \0
+# define OIS_MAX_COMMAND_LENGTH               (4    +6     +OIS_MAX_NAME_LENGTH +1)
 #endif
 
 #if OIS_MAX_VERSION < 2
@@ -35,8 +135,13 @@
 #error "Min can't be above max..."
 #endif
 
-#ifndef OIS_MAX_COMMAND_LENGTH
-#define OIS_MAX_COMMAND_LENGTH 128
+//------------------------------------------------------------------------------
+// If USB_JOYSTICK is defined, this library will NOT communicate using the OIS protocol.
+// Instead, it will communicate as a native USB joystick.
+// To use this feature, you need to install custom firmware from the following project:
+//   https://github.com/harlequin-tech/arduino-usb
+#ifdef USB_JOYSTICK
+# include "joystick.h"
 #endif
 
 //todo - toggle numeric input support
@@ -47,17 +152,8 @@
     CL_TNI_PAYLOAD_T = 0x10,
   };*/
 
-#if OIS_BINARY && OIS_ASCII
-# define IF_BINARY if( ois.binary )
-# define IF_ASCII  if( !ois.binary )
-#elif OIS_BINARY
-# define IF_BINARY if(1)
-# define IF_ASCII  if(0)
-#else
-# define IF_BINARY if(0)
-# define IF_ASCII  if(1)
-#endif
-
+//------------------------------------------------------------------------------
+// The main user-facing structures provided by the library:
 enum NumericType
 {
   Boolean,
@@ -82,12 +178,17 @@ struct OisCommand
 };
 struct OisState;
 
+//------------------------------------------------------------------------------
+// The main user-facing functions provided by the library:
 void ois_setup(OisState&, const char* name, uint32_t pid, uint32_t vid, OisCommand* commands, int numCommands, OisNumericInput* inputs, int numInputs, OisNumericOutput* outputs, int numOutputs, int version);
 void ois_loop(OisState&);
 void ois_set(OisState&, OisNumericOutput& output, int value);
 void ois_execute(OisState&, OisCommand& command);
 void ois_print(OisState&, const char*);
 
+
+//------------------------------------------------------------------------------
+// A utility for timing your loop performance if you need such a thing:
 class OisProfiler
 {
 public:
@@ -124,16 +225,29 @@ private:
 };
 
 
+//------------------------------------------------------------------------------
+// Utility macros:
 #define OIS_BUFFER_LENGTH (OIS_MAX_COMMAND_LENGTH*2)
 #define FOURCC(str)                                                            \
   ((uint32_t)(uint8_t)(str[0])        | ((uint32_t)(uint8_t)(str[1]) << 8) |   \
   ((uint32_t)(uint8_t)(str[2]) << 16) | ((uint32_t)(uint8_t)(str[3]) << 24 ))  //
 
 
+//------------------------------------------------------------------------------
+// Helper macros for code stripping:
+#if OIS_BINARY && OIS_ASCII
+# define IF_BINARY if( ois.binary )
+# define IF_ASCII  if( !ois.binary )
+#elif OIS_BINARY
+# define IF_BINARY if(1)
+# define IF_ASCII  if(0)
+#else
+# define IF_BINARY if(0)
+# define IF_ASCII  if(1)
+#endif
 
-
-
-
+//------------------------------------------------------------------------------
+// Main data structure for a connection:
 struct OisState
 {
   enum DeviceState
@@ -217,6 +331,8 @@ struct OisState
 };
 
 
+//------------------------------------------------------------------------------
+// User friendly overloads/alternatives of the ois_setup function:
 template<class CMD, class NI, class NO>
 void ois_setup_structs(OisState& ois, const char* name, uint32_t pid, uint32_t vid, CMD& commands, NI& inputs, NO& outputs, int version = OIS_MAX_VERSION)
 {
