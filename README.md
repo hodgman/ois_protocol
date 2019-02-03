@@ -1,20 +1,6 @@
 # Open Interactivity System
 Custom user input/output devices for games.
 
-## Background
-
-This project is inspired by an an extension of the serial protocol developed by Flat Earth Games for Objects In Space, described here:
-
-- http://objectsgame.com/the-controllers/arduino-tutorial/
-- http://objectsgame.com/the-controllers/ois-serial-data-protocol/
-
-And with existing library support here:
-
-- https://github.com/Segwegler/OIS_Library
-- https://bitbucket.org/pjhardy/arduinosinspace/src/master/
-
-These existing libraries and specification are referred to as "v1" here, with this project presented as a proposal for a possible "v2".
-
 ## Goals
 
 By adding support for the OIS protocol to your game, your users can create their own physical input devices using hobbyist hardware such as Arduino.
@@ -29,12 +15,48 @@ Use cases:
 
 This project defines a communication specification, plus reference implementations that can be dropped into your games / input devices.
 
+## Implementations
+
+TODO: How to use / configure
+
+- [cpp](cpp)
+  - Use if adding support to your game/app to act as a host.
+  - Use if making a controller where C++ is applicable.
+- [arduino](arduino)
+  - Use if making a physical controller based on Arduino hardware
+- [javascript](javascript)
+  - Use if making a Web-browser based controller.
+
+### Examples
+
+- [javascript/example](javascript/example)
+  - A HTML virtual controller using Websockets
+- [app_ois_hub](app_ois_hub/README.md)
+  - A C++ host (e.g. as you would use in a game) using serial (COM) ports and Websockets
+  - A C++ client / virtual controller using serial (COM) ports
+  - A virtual direct input device (translate OIS commands to vJoy commands)
+  - A GUI to visualize OIS state / communication
+
 ## TODO
 
 This library is a work in progress. Contributors welcome!
 
-- [ ] Documentation! (including this file)
-- [ ] compatibility with their "v1" spec:
+- [x] Usable features:
+  - [x] C++ host (for use in your games)
+  - [x] C++ client (for use in controllers)
+  - [x] Arduino client  (for use in physical controllers)
+  - [x] JavaScript client (for use in web controllers)
+  - [x] Example GUI application
+  - [x] Game compatibility 
+    - [x] [Objects in Space](http://objectsgame.com/)
+    - [x] [22 Racing Series](http://www.22series.com/)
+- [ ] Documentation! 
+  - [ ] README files
+  - [ ] ASCII protocol description
+    - [ ] Backus–Naur form?
+  - [x] Binary protocol description
+  - [ ] State diagram
+- [ ] Test compatibility with the "v1" spec:
   - [x] Test the Arduino device code against Objects In Space game.
   - [ ] Test the C++ host code against other arduino libraries (e.g. Arduinos In Space).
 - [ ] Collaborate with the community to nail down an ideal "v2" spec.
@@ -42,48 +64,49 @@ This library is a work in progress. Contributors welcome!
   - [ ] More testing of the binary communication mode.
 - [ ] Example implementations in other languages
   - [x] C++
-  - [ ] C#
   - [x] Javascript
-- [ ] Other transport mechanisms besides serial ports
-  - [x] Websocket client
-  - [ ] Websocket server
-  - [ ] HTTP, pipes, shared memory?
+  - [ ] C#
+- [ ] Other transport mechanisms
+  - [x] Serial ports
+  - [x] Websockets
+  - [ ] TCP, HTTP, pipes, shared memory?
 - [ ] Port to platforms other than Windows.
 - [ ] Game Engine examples (Unity, Unreal?).
-- [x] Add an example host application that translates the OIS device into a virtual Direct Input device using vJoy (allow OIS devices to work on non-OIS-compatible games)
+- [ ] Example apps
+  - [x] Translate data from an OIS device into a virtual Direct Input device using vJoy (allow OIS devices to work on non-OIS-compatible games)
 
-## Implementations
+## Background
 
-TODO: How to use / configure
+This project is inspired by an an extension of the serial protocol developed by Flat Earth Games for Objects In Space, described here:
 
-- serial_device_arduino
-  - example
-- serial_host_cpp
-  - [example_ois2vjoy](serial_host_cpp/example_ois2vjoy/README.md)
+- http://objectsgame.com/the-controllers/arduino-tutorial/
+- http://objectsgame.com/the-controllers/ois-serial-data-protocol/
+
+And with existing library support here:
+
+- https://github.com/Segwegler/OIS_Library
+- https://bitbucket.org/pjhardy/arduinosinspace/src/master/
+
+These existing libraries and specification are referred to as "v1" here, with this project presented as a proposal for a possible "v2".
 
 ## Protocol Overview
 
 ### Protocol states
 
-#### Handshaking (HS)
+- Handshaking (HS)
+  - Device  requests a connection from the host, negotiates the protocol version.
+- Synchronisation (SYN)
+  - Device registers inputs, outputs and commands that it can send/receive.
+- Active (ACT)
+  - Device and host send/receive values and commands.
 
-Device  requests a connection from the host, negotiates the protocol version.
+### Data Types
 
-#### Synchronisation (SYN)
-
-Device registers inputs, outputs and commands that it can send/receive.
-
-#### Active (ACT)
-
-Device and host send/receive values and commands.
-
-### Types
-
-- Boolean - true or false
+- `Boolean` - true or false
   - 0 or 1
-- Number - 16 bit signed integer
+- `Number` - 16 bit signed integer
   - -32768 to 32767
-- Fraction - 16 bit signed integer, scaled by 100 (i.e. The number 1.5 is encoded as 150)
+- `Fraction` - 16 bit signed integer, scaled by 100 (i.e. The number 1.5 is encoded as 150)
   - -327.68 to 327.67
 
 ## Transmission formats
