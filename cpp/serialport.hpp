@@ -29,7 +29,7 @@ public:
 
 	void PurgeReadBuffer();
 	int  Read(char* buffer, int size);
-	bool Write(const char* buffer, int size);
+	int  Write(const char* buffer, int size);
 private:
 	SerialPort( const SerialPort& );
 	SerialPort& operator=( const SerialPort& );
@@ -256,6 +256,19 @@ void SerialPort::SetBaud(int baud, bool purge)
 	serialParameters.StopBits    = ONESTOPBIT;
 	serialParameters.Parity      = NOPARITY;
 		
+	// Set COM port timeout settings
+	COMMTIMEOUTS timeouts = {};
+	timeouts.ReadIntervalTimeout = 50;
+	timeouts.ReadTotalTimeoutConstant = 50;
+	timeouts.ReadTotalTimeoutMultiplier = 10;
+	timeouts.WriteTotalTimeoutConstant = 50;
+	timeouts.WriteTotalTimeoutMultiplier = 10;
+	if(SetCommTimeouts(m_handle, &timeouts) == 0)
+	{
+		OIS_WARN("Error setting timeouts");
+		return Disconnect();
+	}
+
 	if( !SetCommState(m_handle, &serialParameters) )
 	{
 		OIS_WARN("could not set Serial port parameters");
@@ -311,21 +324,28 @@ int SerialPort::Read(char* buffer, int bufferSize)
 	return 0;
 }
 
-bool SerialPort::Write(const char* buffer, int bufferSize)
+int SerialPort::Write(const char* buffer, int bufferSize)
 {
 	if( m_handle == INVALID_HANDLE_VALUE || bufferSize <= 0 )
 		return false;
+	
+	COMSTAT status = {};
+	if( !ClearCommError(m_handle, 0, &status) )
+	{
+		Disconnect();
+		return 0;
+	}
+
 	DWORD bytesSent;
 	if( !WriteFile(m_handle, (void*)buffer, bufferSize, &bytesSent, 0) )
 	{
 		if( !ClearCommError(m_handle, 0, 0) )
 			Disconnect();
-		return false;
+		return -1;
 	}
 	else
 	{
-	//todo	out_overflow = bytesSent != buf_size;
-		return true;
+		return (int)bytesSent;
 	}
 }
 

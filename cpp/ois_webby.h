@@ -40,15 +40,15 @@ public:
 		}
 		return toCopy;
 	}
-	bool Write(const char* buffer, int size)
+	int Write(const char* buffer, int size)
 	{
 		OIS_ASSERT( size >= 0 );
 		if( size <= 0 )
-			return false;
+			return -1;
 		writeBuffer.push_back({ {}, size });
 		writeBuffer.back().data.resize(size);
 		memcpy(&writeBuffer.back().data.front(), buffer, size);
-		return true;
+		return size;
 	}
 	virtual const char* Name()
 	{

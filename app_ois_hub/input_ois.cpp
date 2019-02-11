@@ -171,6 +171,43 @@ void InputOis_Disconnect(const OisDevice& d)
 	}
 }
 
+
+
+OisHostEx g_out;
+
+void OutputOis_Connect(const PortName& name)
+{
+	delete g_out.device;
+	delete g_out.port;
+
+	g_out.port = new OisPortSerial(name.path.c_str());
+	g_out.device = new OisHost(*g_out.port, name.name, GAME_PID, GAME_VID);
+
+	for( auto& d : g_allDevices.devices )
+	{
+		for( auto& e : d.device->DeviceEvents() )
+			g_out.device->AddEvent(e.name);
+
+		for( auto& o : d.device->DeviceOutputs() )
+			g_out.device->AddOutput(o.name, o.type);
+	}
+}
+
+void OutputOis_Update(OisHostEx*& device, float deltaTime)
+{
+	if( !g_out.device )
+	{
+		device = 0;
+		return;
+	}
+	device = &g_out;
+
+	OIS_STRING_BUILDER sb;
+	g_out.device->Poll(sb, deltaTime);
+}
+
+
+
 void OisLog(const char* category, const char* fmt, ...)
 {
 	std::string str;

@@ -309,7 +309,7 @@ public:
 	virtual void Connect() = 0;
 	virtual void Disconnect() = 0;
 	virtual int  Read(char* buffer, int size) = 0;
-	virtual bool Write(const char* buffer, int size) = 0;
+	virtual int  Write(const char* buffer, int size) = 0;
 	virtual const char* Name() { return ""; }
 };
 
@@ -324,7 +324,7 @@ public:
 	void Connect()                           { return m_port.Connect(); }
 	void Disconnect()                        { return m_port.Disconnect(); }
 	int Read(char* buffer, int size)         { return m_port.Read(buffer, size); }
-	bool Write(const char* buffer, int size) { return m_port.Write(buffer, size); }
+	int Write(const char* buffer, int size)  { return m_port.Write(buffer, size); }
 	virtual const char* Name()               { return m_port.PortName().c_str(); }
 private:
 	SerialPort m_port;
@@ -425,10 +425,10 @@ protected:
 		CL_SYN_ = 'S',//0x53
 		CL_DBG = 0x04,
 		CL_451_ = '4',//0x34
-		CL_END_ = 'E',//0x45
+		CL_END  = 'E',//0x45
 		CL_TNI = 0x05,
 		CL_PID = 0x06,
-		CL_END = 0x07,
+		CL_REM = 0x07,
 		CL_VAL_1 = 0x08,
 		CL_VAL_2 = 0x09,
 		CL_VAL_3 = 0x0A,
@@ -510,15 +510,9 @@ protected:
 	bool                     m_binary = false;
 
 	OisBase(OIS_PORT& port, const OIS_STRING& name, unsigned gameVersion, const char* gameName)
-		: m_port(port), m_deviceName(name), m_gameVersion(gameVersion), m_gameName(gameName)
-	{
-		_ClearState();
-	}
+		: m_port(port), m_deviceName(name), m_gameVersion(gameVersion), m_gameName(gameName) {}
 	OisBase(OIS_PORT& port, const OIS_STRING& name, uint32_t pid, uint32_t vid)
-		: m_port(port), m_deviceName(name), m_pid(pid), m_vid(vid)
-	{
-		_ClearState();
-	}
+		: m_port(port), m_deviceName(name), m_pid(pid), m_vid(vid) {}
 };
 
 //------------------------------------------------------------------------------
@@ -528,7 +522,9 @@ class OisDevice : private OisBase<OisDevice>
 public:
 	OisDevice(OIS_PORT& port, const OIS_STRING& name, unsigned gameVersion, const char* gameName)
 		: OisBase(port, name, gameVersion, gameName)
-	{}
+	{
+		ClearState();
+	}
 	const char* GetDeviceName() const { return m_deviceNameOverride.empty() ? m_deviceName.c_str() : m_deviceNameOverride.c_str(); }
 	uint32_t    GetProductID()  const { return m_pid; }
 	uint32_t    GetVendorID()   const { return m_vid; }
@@ -564,6 +560,7 @@ public:
 	OisHost(OIS_PORT& port, const OIS_STRING& name, uint32_t pid, uint32_t vid)
 		: OisBase(port, name, pid, vid)
 	{
+		ClearState();
 	}
 
 	const OIS_STRING& GetGameName()        const { return m_gameName; }
@@ -662,13 +659,19 @@ template<class T> typename T::value_type* OisState::FindChannel(T& values, Chann
 template<class T>
 void OisBase<T>::SendData(const uint8_t* cmd, int length)
 {
-	m_port.Write((char*)cmd, length);
+	if( 0 >= m_port.Write((char*)cmd, length) )
+	{
+		m_port.Disconnect();
+	}
 }
 
 template<class T>
 void OisBase<T>::SendText(const char* cmd, bool includeNullTerminator)
 {
-	m_port.Write(cmd, (int)strlen(cmd) + (includeNullTerminator ? 1 : 0));
+	if( 0 >= m_port.Write(cmd, (int)strlen(cmd) + (includeNullTerminator ? 1 : 0)) )
+	{
+		m_port.Disconnect();
+	}
 }
 
 template<class T>
@@ -955,7 +958,6 @@ int OisDevice::ProcessBinary(char* start, char* end)
 			OIS_WARN( "Unknown command: 0x%x", payload);
 			break;
 		case CL_ACT:
-		case CL_END:
 		case CL_EXC_0:
 			break;
 		case CL_CMD:
@@ -979,6 +981,7 @@ int OisDevice::ProcessBinary(char* start, char* end)
 		case CL_VAL_2:
 			cmdLength +=2;
 			break;
+		case CL_END:
 		case CL_VAL_3:
 			cmdLength += 3;
 			break;
@@ -1187,7 +1190,7 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 					{
 					default: OIS_ASSUME(false);
 					case 1: SendText("ACK\n");        break;
-					case 2: SendText(sb.FormatTemp("ACK=%d,%s\n", m_gameVersion, m_gameName)); break;
+					case 2: SendText(sb.FormatTemp("ACK=%d,%s\n", m_gameVersion, m_gameName.c_str())); break;
 					}
 					OIS_INFO( "-> ACK", version );
 				}
@@ -1423,7 +1426,7 @@ void OisHost::SendSync(OIS_STRING_BUILDER& sb)
 		if( m_binary )
 		{
 			uint8_t data[9];
-			data[0] = OisState::CL_PID;
+			data[0] = CL_PID;
 			data[1] = (uint8_t)(m_pid);
 			data[2] = (uint8_t)(m_pid>>8);
 			data[3] = (uint8_t)(m_pid>>16);

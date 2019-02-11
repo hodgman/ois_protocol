@@ -298,7 +298,6 @@ struct OisState
     CL_DBG   = 0x04,
     CL_TNI   = 0x05,
     CL_PID   = 0x06,
-    CL_END   = 0x07,
     CL_VAL_1 = 0x08,
     CL_VAL_2 = 0x09,
     CL_VAL_3 = 0x0A,

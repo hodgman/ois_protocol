@@ -69,6 +69,7 @@ void DoLogGui(struct nk_context* ctx, std::vector<std::string>& log)
 	}
 }
 
+template<bool output>
 void DoConnectingGui(struct nk_context* ctx)
 {
 	nk_layout_row_dynamic(ctx, 30, 1);
@@ -92,15 +93,39 @@ void DoConnectingGui(struct nk_context* ctx)
 			std::string label = it->name + " (" + it->path + ')';
 			if( nk_button_label(ctx, label.c_str()) )
 			{
-				InputOis_Connect(*it);
+				if( output )
+					OutputOis_Connect(*it);
+				else
+					InputOis_Connect(*it);
 			}
 		}
 	}
 }
 
-void DoOisGui(struct nk_context* ctx, OisDeviceEx& d)
+void TGui_Disconnect(const OisDevice& d)
 {
-	OisDevice* device = d.device;
+	InputOis_Disconnect(d);
+}
+void TGui_Disconnect(const OisHost& d) {}
+const char* TGui_GetName(const OisDevice& d)
+{
+	return d.GetDeviceName();
+}
+const char* TGui_GetName(const OisHost& d)
+{
+	return d.GetGameName().c_str();
+}
+
+void TGui_SetInput(OisDevice& d, const OisState::NumericValue& input, const OisState::Value& newValue)
+{
+	d.SetInput(input, newValue);
+}
+void TGui_SetInput(OisHost& d, const OisState::NumericValue& input, const OisState::Value& newValue) {}
+
+template<class T>
+void DoOisGui(struct nk_context* ctx, T& d)
+{
+	auto* device = d.device;
 	if( !device )
 		return;
 	const float ratio2[] = {0.4f, 0.6f};
@@ -108,16 +133,16 @@ void DoOisGui(struct nk_context* ctx, OisDeviceEx& d)
 	nk_layout_row_dynamic(ctx, 30, 1);
 	if( nk_button_label(ctx, "Disconnect") )
 	{
-		InputOis_Disconnect(*device);
+		TGui_Disconnect(*device);
 		return;
 	}
 	nk_layout_row(ctx, NK_DYNAMIC, 30, 2, ratio2);
 	nk_label(ctx, "Name", NK_TEXT_LEFT);
-	nk_label(ctx, device->GetDeviceName(), NK_TEXT_LEFT);
-	nk_label(ctx, "PID", NK_TEXT_LEFT);
-	nk_labelf(ctx, NK_TEXT_LEFT, "0x%8X", device->GetProductID());
-	nk_label(ctx, "VID", NK_TEXT_LEFT);
-	nk_labelf(ctx, NK_TEXT_LEFT, "0x%8X", device->GetVendorID());
+	nk_label(ctx, TGui_GetName(*device), NK_TEXT_LEFT);
+	//nk_label(ctx, "PID", NK_TEXT_LEFT);
+	//nk_labelf(ctx, NK_TEXT_LEFT, "0x%8X", device->GetProductID());
+	//nk_label(ctx, "VID", NK_TEXT_LEFT);
+	//nk_labelf(ctx, NK_TEXT_LEFT, "0x%8X", device->GetVendorID());
 	nk_label(ctx, "Port", NK_TEXT_LEFT);
 	nk_labelf(ctx, NK_TEXT_LEFT, "%s", d.port->Name());
 	nk_label(ctx, "State", NK_TEXT_LEFT);
@@ -189,7 +214,7 @@ void DoOisGui(struct nk_context* ctx, OisDeviceEx& d)
 					}
 				}
 				if( set )
-					device->SetInput(*it, newValue);
+					TGui_SetInput(*device, *it, newValue);
 				nk_tree_pop(ctx);
 			}
 		}
@@ -317,7 +342,7 @@ void DoVJoyUpdate(std::vector<OisDeviceEx*>& devices)
 	}
 }
 
-void DrawGui(struct nk_context* ctx, std::vector<OisDeviceEx*>& devices)
+void DrawGui(struct nk_context* ctx, std::vector<OisDeviceEx*>& devices, OisHostEx* outputDevice)
 {
 	if (nk_begin(ctx, "Inputs", nk_rect(0, 0, (float)gdi.width/2-2, (float)gdi.height), 0))
 	{
@@ -331,7 +356,7 @@ void DrawGui(struct nk_context* ctx, std::vector<OisDeviceEx*>& devices)
 			DoLogGui(ctx, g.webbyLog);
 			nk_tree_pop(ctx);
 		}
-		DoConnectingGui(ctx);
+		DoConnectingGui<false>(ctx);
 		for( auto& item : devices )
 		{
 			if (nk_tree_push(ctx, NK_TREE_TAB, "Ois Input", NK_MAXIMIZED))
@@ -345,6 +370,12 @@ void DrawGui(struct nk_context* ctx, std::vector<OisDeviceEx*>& devices)
 	if (nk_begin(ctx, "Outputs", nk_rect((float)gdi.width/2+2, 0, (float)gdi.width/2-2, (float)gdi.height), 0))
 	{
 		DoVJoyGui(ctx);
+		DoConnectingGui<true>(ctx);
+		if (outputDevice && nk_tree_push(ctx, NK_TREE_TAB, "Ois Input", NK_MAXIMIZED))
+		{
+			DoOisGui(ctx, *outputDevice);
+			nk_tree_pop(ctx);
+		}
 	}
 	nk_end(ctx);
 	
@@ -400,7 +431,7 @@ void RunDemoGui()
 
 	InputOis_Init();
 	
-	std::vector<OisDeviceEx*> devices;
+	std::vector<OisDeviceEx*> inputDevices;
 	
 	auto time = std::chrono::steady_clock::now();
 	float deltaTime = 0;
@@ -417,14 +448,17 @@ void RunDemoGui()
 		}
 		nk_input_end( ctx );
 		
-		InputOis_Update( devices, deltaTime );
+		InputOis_Update( inputDevices, deltaTime );
 
-		DrawGui( ctx, devices );
+		OisHostEx* outputDevice = 0;
+		OutputOis_Update( outputDevice, deltaTime );
+
+		DrawGui( ctx, inputDevices, outputDevice );
 		
-		DoVJoyUpdate( devices );
+		DoVJoyUpdate( inputDevices );
 
 		Sleep(1);
-		devices.clear();
+		inputDevices.clear();
 		
 		auto end = std::chrono::steady_clock::now();
         std::chrono::duration<float> diff = end-time;
