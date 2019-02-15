@@ -30,6 +30,7 @@ public:
 	{
 		for( auto* d : devices )
 			delete d;
+		devices.clear();
 	}
 
 	std::vector<OisSerialConnection*> devices;
