@@ -32,8 +32,11 @@ public:
 			delete d;
 		devices.clear();
 	}
-
-	std::vector<OisSerialConnection*> devices;
+	
+	void New(const char* portPath, const OIS_STRING& portName)
+	{
+		devices.push_back(new OisSerialConnection(portPath, portName, GAME_VERSION, GAME_NAME));
+	}
 	
 	auto Find(const OisDevice& d)
 	{
@@ -42,9 +45,25 @@ public:
 			return &item->m_device == &d;
 		});
 	}
+
+	bool Delete(const OisDevice& d)
+	{
+		auto it = Find(d);
+		if( it == devices.end() )
+			return false;
+		delete *it;
+		std::swap( *it, devices.back() );
+		devices.pop_back();
+		return true;
+	}
+
+	auto begin() { return devices.begin(); }
+	auto end() { return devices.end(); }
 private:
 	OisSerialConnectionList(const OisSerialConnectionList&);
 	OisSerialConnectionList& operator=(const OisSerialConnectionList&);
+	
+	std::vector<OisSerialConnection*> devices;
 };
 
 class OisAllConnectionList
@@ -126,7 +145,7 @@ void InputOis_Update( std::vector<OisDeviceEx*>& devices, float deltaTime )
 	if( !g_websockets )
 		return;
 	
-	for( auto* c : g_serialConnections.devices )
+	for( auto* c : g_serialConnections )
 	{
 		OisDeviceEx& d = g_allDevices.Find( &c->m_port, &c->m_device );
 		UpdateDevice( d );
@@ -155,18 +174,12 @@ void InputOis_Shutdown()
 
 void InputOis_Connect(const PortName& portName)
 {
-	g_serialConnections.devices.push_back( new OisSerialConnection(portName.path.c_str(), portName.name, GAME_VERSION, GAME_NAME) );
+	g_serialConnections.New(portName.path.c_str(), portName.name);
 }
 
 void InputOis_Disconnect(const OisDevice& d)
 {
-	auto it = g_serialConnections.Find(d);
-	if( it != g_serialConnections.devices.end() )
-	{
-		std::swap( *it, g_serialConnections.devices.back() );
-		g_serialConnections.devices.pop_back();
-	}
-	else
+	if( !g_serialConnections.Delete(d) )
 	{
 		g_websockets->Disconnect(d);
 	}
