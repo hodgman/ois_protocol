@@ -129,9 +129,9 @@ void InputOis_Init()
 	g_websockets = new OisWebHost(GAME_VERSION, GAME_NAME, g_webFiles, true, 8080);
 }
 
-static void UpdateDevice( OisDeviceEx& d )
+static void UpdateDevice( OisDeviceEx& d, float deltaTime )
 {
-	d.device->Poll(sb);
+	d.device->Poll(sb, deltaTime);
 	d.newEvents.clear();
 	d.device->PopEvents([&](const OisState::Event& event)
 	{
@@ -148,14 +148,14 @@ void InputOis_Update( std::vector<OisDeviceEx*>& devices, float deltaTime )
 	for( auto* c : g_serialConnections )
 	{
 		OisDeviceEx& d = g_allDevices.Find( &c->m_port, &c->m_device );
-		UpdateDevice( d );
+		UpdateDevice( d, deltaTime );
 	}
 
 	g_websockets->Poll();
 	for( auto* c : g_websockets->Connections() )
 	{
 		OisDeviceEx& d = g_allDevices.Find( &c->m_port, &c->m_device );
-		UpdateDevice( d );
+		UpdateDevice( d, deltaTime );
 	}
 
 	g_allDevices.GarbageCollect();

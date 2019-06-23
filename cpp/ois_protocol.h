@@ -167,7 +167,7 @@ const static unsigned OIS_MAX_COMMAND_LENGTH = 4   +9       +9       +OIS_MAX_NA
 #endif
 
 //------------------------------------------------------------------------------
-// If you want use use your own assert implementation, define OIS_ASSERT as appropriate.
+// If you want to use use your own assert implementation, define OIS_ASSERT as appropriate.
 #ifndef OIS_ASSERT
 # ifdef _DEBUG
 #  include <cassert>
@@ -489,8 +489,9 @@ protected:
 	void SendData(const uint8_t* cmd, int length);
 	void SendText(const char* cmd, bool includeNullTerminator=false);
 	void SendValue(const NumericValue& v, OIS_STRING_BUILDER& sb, unsigned PAYLOAD_SHIFT, unsigned VAL_1, unsigned VAL_2, unsigned VAL_3, unsigned VAL_4);
-	void ConnectAndPoll();
+	void ConnectAndPoll(float deltaTime);
 	bool ExpectState(DeviceStateMask state, const char* cmd, unsigned version);
+	bool CheckState(DeviceStateMask state, const char* cmd, unsigned version);
 	void _ClearState()                                    { return static_cast<CRTP*>(this)->ClearState(); }
 	bool _ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb) { return static_cast<CRTP*>(this)->ProcessAscii(cmd, sb); }
 	int  _ProcessBinary(char* start, char* end)           { return static_cast<CRTP*>(this)->ProcessBinary(start, end); }
@@ -505,6 +506,7 @@ protected:
 	unsigned                 m_protocolVersion = 0;
 	uint32_t                 m_pid = 0;
 	uint32_t                 m_vid = 0;
+	float                    m_delayedSend452 = 0;
 	DeviceState              m_connectionState = Handshaking;
 	unsigned                 m_commandLength = 0;
 	char                     m_commandBuffer[OIS_MAX_COMMAND_LENGTH * 2];
@@ -536,7 +538,7 @@ public:
 	const OIS_VECTOR<NumericValue>& DeviceOutputs() const { return m_numericOutputs; }
 	const OIS_VECTOR<Event>&        DeviceEvents()  const { return m_events; }
 
-	void Poll(OIS_STRING_BUILDER&);
+	void Poll(OIS_STRING_BUILDER&, float deltaTime);
 
 	template<class T>
 	bool PopEvents(T& fn);//calls fn(const Event&)
@@ -751,7 +753,7 @@ void OisBase<T>::ProcessCommands()
 }
 
 template<class T>
-void OisBase<T>::ConnectAndPoll()
+void OisBase<T>::ConnectAndPoll(float deltaTime)
 {
 	if (!m_port.IsConnected())
 	{
@@ -766,14 +768,34 @@ void OisBase<T>::ConnectAndPoll()
 			break;
 		ProcessCommands();
 	}
+
+	if( m_delayedSend452 )
+	{
+		m_delayedSend452 -= deltaTime;
+		if( m_delayedSend452 < 0 )
+		{
+			m_delayedSend452 = 0;
+			if( m_connectionState == Synchronisation )
+			{
+				SendText("452\r\n");
+				OIS_INFO( "-> 452" );
+			}
+		}
+	}
+}
+
+template<class T>
+bool OisBase<T>::CheckState(DeviceStateMask state, const char* cmd, unsigned version)
+{
+	if (m_protocolVersion < version)
+		OIS_WARN("Did not expect command under version #%d: %s", m_protocolVersion, cmd);
+	return 0 != ((1 << m_connectionState) & state);
 }
 
 template<class T>
 bool OisBase<T>::ExpectState(DeviceStateMask state, const char* cmd, unsigned version)
 {
-	if (m_protocolVersion < version)
-		OIS_WARN("Did not expect command under version #%d: %s", m_protocolVersion, cmd);
-	bool badState = 0 == ((1 << m_connectionState) & state);
+	bool badState = !CheckState(state, cmd, version);
 	if (badState)
 	{
 		OIS_WARN("Did not expect command at this time: %s", cmd);
@@ -915,9 +937,9 @@ bool OisState::SetValueAndEnqueue(const NumericValue& variable, Value value, OIS
 
 //------------------------------------------------------------------------------
 
-void OisDevice::Poll(OIS_STRING_BUILDER& sb)
+void OisDevice::Poll(OIS_STRING_BUILDER& sb, float deltaTime)
 {
-	ConnectAndPoll();
+	ConnectAndPoll(deltaTime);
 	for (ChannelIndex index : m_queuedInputs)
 	{
 		const NumericValue* v = FindChannel(m_numericInputs, index);
@@ -1138,6 +1160,7 @@ int OisDevice::ProcessBinary(char* start, char* end)
 
 bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 {
+//	OIS_INFO( "RAW: %s", cmd );
 	if (!cmd[0])
 		return false;
 	uint32_t type = 0;
@@ -1177,26 +1200,54 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 			case _451:
 			case SYN:
 			{
-				if( !ExpectState(1<<Handshaking, cmd, 1) )
-					ClearState();
 				char* mode = ZeroDelimiter(payload, ',');
 				bool binary = *mode == 'B';
 				int version = atoi(payload);
 				if( version < 1 )
 					version = 1;
-				OIS_INFO( "<- SYN: %d/%s", version, binary?"B":"A" );
+				if( type == _451 )
+				{
+					OIS_INFO( "<- 451 (SYN)" );
+				}
+				else
+				{
+					OIS_INFO( "<- SYN: %d/%s", version, binary?"B":"A" );
+				}
+
+				if( !CheckState(1<<Handshaking, cmd, 1) )
+				{
+					if( m_protocolVersion > (unsigned)version )
+					{
+						OIS_WARN( "Ignoring command: %s", cmd);
+						break;
+					}
+					else
+					{
+						OIS_WARN( "Restarting handshake");
+						ClearState();
+					}
+				}
+
 				if( !(version == 1 && binary) && version >= 1 && version <= 2 )
 				{
 					m_binary = binary;
 					m_protocolVersion = version;
 					m_connectionState = Synchronisation;
-					switch( version )
+					if( type == _451 )
 					{
-					default: OIS_ASSUME(false);
-					case 1: SendText("ACK\n");        break;
-					case 2: SendText(sb.FormatTemp("ACK=%d,%s\n", m_gameVersion, m_gameName.c_str())); break;
+						m_delayedSend452 = 1.0f;
 					}
-					OIS_INFO( "-> ACK", version );
+					else
+					{
+						m_delayedSend452 = 0;
+						switch( version )
+						{
+						default: OIS_ASSUME(false);
+						case 1: SendText("ACK\n");        break;
+						case 2: SendText(sb.FormatTemp("ACK=%d,%s\n", m_gameVersion, m_gameName.c_str())); break;
+						}
+						OIS_INFO( "-> ACK", version );
+					}
 				}
 				else
 				{
@@ -1325,6 +1376,7 @@ void OisDevice::ClearState()
 	m_vid = OIS_FOURCC("OIS\0");
 	m_deviceNameOverride = "";
 	m_commandLength = 0;
+	m_delayedSend452 = 0;
 	m_numericInputs.clear();
 	m_numericOutputs.clear();
 	m_queuedInputs.clear();
@@ -1474,7 +1526,7 @@ void OisHost::SendSync(OIS_STRING_BUILDER& sb)
 
 void OisHost::Poll(OIS_STRING_BUILDER& sb, float deltaTime)
 {
-	ConnectAndPoll();
+	ConnectAndPoll(deltaTime);
 
 	if( m_connectionState == Handshaking )
 	{

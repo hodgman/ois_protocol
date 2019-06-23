@@ -1,4 +1,4 @@
-﻿/*** https://github.com/hodgman/ois_protocol
+/*** https://github.com/hodgman/ois_protocol
  *      _____                                                                      
  *     / ___ \                                                                     
  *    | |   | | ____    ____  ____                                                 
@@ -109,7 +109,7 @@
 // However, the implementation needs to define a fixed sized command buffer for practical reasons.
 // A sensible default size is chosen here, but you can override it by defining OIS_MAX_NAME_LENGTH.
 #ifndef OIS_MAX_NAME_LENGTH
-# define OIS_MAX_NAME_LENGTH = 120;
+# define OIS_MAX_NAME_LENGTH 120
 #endif
 
 //------------------------------------------------------------------------------
@@ -298,6 +298,7 @@ struct OisState
     CL_DBG   = 0x04,
     CL_TNI   = 0x05,
     CL_PID   = 0x06,
+    CL_END   = 0x07,
     CL_VAL_1 = 0x08,
     CL_VAL_2 = 0x09,
     CL_VAL_3 = 0x0A,
@@ -705,24 +706,26 @@ void ois_send_handshake(OisState& ois)
     Serial.begin( ois.baud = 9600 );
     ois.synCount = 0;
   }*/
+
 #if OIS_MIN_VERSION == 0
   Serial.print("451\n");//hack for objects in space beta
 #endif
 
 #if OIS_MAX_VERSION > 0
-  Serial.print("SYN=");
-  Serial.print(ois.version);
+  const char* extra = "";
 #if OIS_MAX_VERSION > 1
   if( ois.version > 1 )
   {
 #if OIS_BINARY
-    Serial.print(",B");
+    extra = ",B";
 #else
-    Serial.print(",A");
+    extra = ",A";
 #endif
   }
 #endif
-  Serial.print("\n");
+  char buf[16];
+  sprintf(buf, "SYN=%d%s\n", ois.version, extra);
+  Serial.print(buf);
 #endif
 
   delay(1000);
