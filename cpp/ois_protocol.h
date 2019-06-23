@@ -406,6 +406,7 @@ protected:
 		EXC = OIS_FOURCC("EXC="),
 		DBG = OIS_FOURCC("DBG="),
 		DEN = OIS_FOURCC("DEN\0"),
+		_451 = OIS_FOURCC("451\0"),
 		_452 = OIS_FOURCC("452\r"),
 		ACK1 = OIS_FOURCC("ACK\0"),
 		ACK2 = OIS_FOURCC("ACK="),
@@ -469,7 +470,7 @@ protected:
 	static uint16_t ToRawValue(NumericType type, Value value);
 	static Value    FromRawValue(NumericType type, uint16_t value);
 	static int      PackNumericValueCommand(const NumericValue& v, uint8_t cmd[5], unsigned PAYLOAD_SHIFT, unsigned VAL_1, unsigned VAL_2, unsigned VAL_3, unsigned VAL_4);
-	static bool     SetValueAndEnqueue(const NumericValue& input, Value value, OIS_VECTOR<NumericValue>& values, OIS_VECTOR<ChannelIndex> queue);
+	static bool     SetValueAndEnqueue(const NumericValue& input, Value value, OIS_VECTOR<NumericValue>& values, OIS_VECTOR<ChannelIndex>& queue);
 	static int      CmdStrLength(const char* c, const char* end, char terminator);
 	static char*    ZeroDelimiter(char* str, char delimiter);
 	template<class T> static typename T::value_type* FindChannel(T& values, int channel);
@@ -897,7 +898,7 @@ int OisState::PackNumericValueCommand(const NumericValue& v, uint8_t cmd[5], uns
 	return cmdLength;
 }
 
-bool OisState::SetValueAndEnqueue(const NumericValue& variable, Value value, OIS_VECTOR<NumericValue>& values, OIS_VECTOR<ChannelIndex> queue)
+bool OisState::SetValueAndEnqueue(const NumericValue& variable, Value value, OIS_VECTOR<NumericValue>& values, OIS_VECTOR<ChannelIndex>& queue)
 {
 	if (values.empty())
 		return false;
@@ -1142,7 +1143,7 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 	uint32_t type = 0;
 	if (cmd[1] && cmd[2])
 		type = OIS_FOURCC(cmd);
-	bool isKeyVal = 0 != isdigit(cmd[0]);
+	bool isKeyVal = 0 != isdigit(cmd[0]) && type != _451;
 	if (isKeyVal)
 	{
 		if (!ExpectState(1 << Active, cmd, 2))
@@ -1165,7 +1166,7 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 	}
 	else
 	{
-		char* payload = cmd + 4;
+		char* payload = cmd[3] == '\0' ? "" : cmd + 4;
 		switch (type)
 		{
 			default:
@@ -1173,6 +1174,7 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 				OIS_WARN( "Unknown command: %s", cmd);
 				break;
 			}
+			case _451:
 			case SYN:
 			{
 				if( !ExpectState(1<<Handshaking, cmd, 1) )
@@ -1180,6 +1182,8 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 				char* mode = ZeroDelimiter(payload, ',');
 				bool binary = *mode == 'B';
 				int version = atoi(payload);
+				if( version < 1 )
+					version = 1;
 				OIS_INFO( "<- SYN: %d/%s", version, binary?"B":"A" );
 				if( !(version == 1 && binary) && version >= 1 && version <= 2 )
 				{
