@@ -507,6 +507,8 @@ protected:
 	uint32_t                 m_pid = 0;
 	uint32_t                 m_vid = 0;
 	float                    m_delayedSend452 = 0;
+	float                    m_idleTimer = 0;
+	unsigned                 m_reconnectAttempts = 0;
 	DeviceState              m_connectionState = Handshaking;
 	unsigned                 m_commandLength = 0;
 	char                     m_commandBuffer[OIS_MAX_COMMAND_LENGTH * 2];
@@ -533,6 +535,7 @@ public:
 	uint32_t    GetVendorID()   const { return m_vid; }
 	bool        Connecting()    const { return m_connectionState != Handshaking; }
 	bool        Connected()     const { return m_connectionState == Active; }
+	float       IdleTimer()     const { return m_idleTimer; }
 	
 	const OIS_VECTOR<NumericValue>& DeviceInputs()  const { return m_numericInputs; }
 	const OIS_VECTOR<NumericValue>& DeviceOutputs() const { return m_numericOutputs; }
@@ -571,6 +574,7 @@ public:
 	bool              Connecting()         const { return m_connectionState != Handshaking; }
 	bool              Connected()          const { return m_connectionState == Active; }
 	unsigned          GetProtocolVersion() const { return m_protocolVersion; }
+	float             IdleTimer()          const { return m_idleTimer; }
 
 	const OIS_VECTOR<NumericValue>& DeviceInputs()  const { return m_numericInputs; }
 	const OIS_VECTOR<NumericValue>& DeviceOutputs() const { return m_numericOutputs; }
@@ -755,11 +759,17 @@ void OisBase<T>::ProcessCommands(OIS_STRING_BUILDER& sb)
 template<class T>
 void OisBase<T>::ConnectAndPoll(OIS_STRING_BUILDER& sb, float deltaTime)
 {
+	if( m_connectionState == Handshaking )
+		m_idleTimer += deltaTime;
 	if (!m_port.IsConnected())
 	{
 		if (m_connectionState != Handshaking)
 			_ClearState();
-		m_port.Connect();
+		if( m_idleTimer > m_reconnectAttempts + 1.0f )
+		{
+			m_reconnectAttempts++;
+			m_port.Connect();
+		}
 		return;
 	}
 	for (;;)
@@ -1233,8 +1243,12 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 					m_binary = binary;
 					m_protocolVersion = version;
 					m_connectionState = Synchronisation;
+					m_idleTimer = 0;
 					if( type == _451 )
 					{
+						//If we received the non-standard 451 SYN command, then 
+						// don't send the non-standard 452 ack command immediately;
+						// Wait a second to see if a standard SYN= command is sent following the 451.
 						m_delayedSend452 = 1.0f;
 					}
 					else
@@ -1369,6 +1383,9 @@ bool OisDevice::SetInput(uint16_t channel, Value value)
 
 void OisDevice::ClearState()
 {
+	if( m_connectionState != Handshaking )
+		m_idleTimer = 0;
+	m_reconnectAttempts = 0;
 	m_connectionState = Handshaking;
 	m_protocolVersion = 1;
 	m_binary = false;
@@ -1796,6 +1813,7 @@ bool OisHost::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 			{
 				m_protocolVersion = 1;
 				m_connectionState = Synchronisation;
+				m_idleTimer = 0;
 				break;
 			}
 			case ACK2:
@@ -1803,7 +1821,8 @@ bool OisHost::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 				m_gameName = ZeroDelimiter(payload, ',');
 				m_gameVersion = atoi(payload);
 				m_binary = true;
-				m_connectionState = OisState::Synchronisation;
+				m_connectionState = Synchronisation;
+				m_idleTimer = 0;
 				break;
 			}
 			case END:
@@ -1960,6 +1979,9 @@ bool OisHost::ToggleInput(uint16_t channel, bool active)
 
 void OisHost::ClearState()
 {
+	if( m_connectionState != Handshaking )
+		m_idleTimer = 0;
+	m_reconnectAttempts = 0;
 	m_connectionState = Handshaking;
 	m_protocolVersion = 0;
 	m_binary = false;
