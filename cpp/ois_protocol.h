@@ -485,11 +485,11 @@ template<class CRTP> class OisBase : protected OisState
 {
 protected:
 	bool ReadCommands();
-	void ProcessCommands();
+	void ProcessCommands(OIS_STRING_BUILDER& sb);
 	void SendData(const uint8_t* cmd, int length);
 	void SendText(const char* cmd, bool includeNullTerminator=false);
 	void SendValue(const NumericValue& v, OIS_STRING_BUILDER& sb, unsigned PAYLOAD_SHIFT, unsigned VAL_1, unsigned VAL_2, unsigned VAL_3, unsigned VAL_4);
-	void ConnectAndPoll(float deltaTime);
+	void ConnectAndPoll(OIS_STRING_BUILDER& sb, float deltaTime);
 	bool ExpectState(DeviceStateMask state, const char* cmd, unsigned version);
 	bool CheckState(DeviceStateMask state, const char* cmd, unsigned version);
 	void _ClearState()                                    { return static_cast<CRTP*>(this)->ClearState(); }
@@ -705,7 +705,7 @@ bool OisBase<T>::ReadCommands()
 }
 
 template<class T>
-void OisBase<T>::ProcessCommands()
+void OisBase<T>::ProcessCommands(OIS_STRING_BUILDER& sb)
 {
 	char* start = m_commandBuffer;
 	char* end = start + m_commandLength;
@@ -753,7 +753,7 @@ void OisBase<T>::ProcessCommands()
 }
 
 template<class T>
-void OisBase<T>::ConnectAndPoll(float deltaTime)
+void OisBase<T>::ConnectAndPoll(OIS_STRING_BUILDER& sb, float deltaTime)
 {
 	if (!m_port.IsConnected())
 	{
@@ -766,7 +766,7 @@ void OisBase<T>::ConnectAndPoll(float deltaTime)
 	{
 		if (!ReadCommands())
 			break;
-		ProcessCommands();
+		ProcessCommands(sb);
 	}
 
 	if( m_delayedSend452 )
@@ -939,7 +939,7 @@ bool OisState::SetValueAndEnqueue(const NumericValue& variable, Value value, OIS
 
 void OisDevice::Poll(OIS_STRING_BUILDER& sb, float deltaTime)
 {
-	ConnectAndPoll(deltaTime);
+	ConnectAndPoll(sb, deltaTime);
 	for (ChannelIndex index : m_queuedInputs)
 	{
 		const NumericValue* v = FindChannel(m_numericInputs, index);
@@ -1526,7 +1526,7 @@ void OisHost::SendSync(OIS_STRING_BUILDER& sb)
 
 void OisHost::Poll(OIS_STRING_BUILDER& sb, float deltaTime)
 {
-	ConnectAndPoll(deltaTime);
+	ConnectAndPoll(sb, deltaTime);
 
 	if( m_connectionState == Handshaking )
 	{
