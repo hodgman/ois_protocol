@@ -467,8 +467,8 @@ protected:
 	};
 	typedef uint32_t DeviceStateMask;
 
-	static uint16_t ToRawValue(NumericType type, Value value);
-	static Value    FromRawValue(NumericType type, uint16_t value);
+	static int16_t  ToRawValue(NumericType type, Value value);
+	static Value    FromRawValue(NumericType type, int16_t value);
 	static int      PackNumericValueCommand(const NumericValue& v, uint8_t cmd[5], unsigned PAYLOAD_SHIFT, unsigned VAL_1, unsigned VAL_2, unsigned VAL_3, unsigned VAL_4);
 	static bool     SetValueAndEnqueue(const NumericValue& input, Value value, OIS_VECTOR<NumericValue>& values, OIS_VECTOR<ChannelIndex>& queue);
 	static int      CmdStrLength(const char* c, const char* end, char terminator);
@@ -864,7 +864,7 @@ int OisState::CmdStrLength(const char* c, const char* end, char terminator)
 	return length + (foundNull ? 0 : OIS_MAX_COMMAND_LENGTH * 2);
 }
 
-uint16_t OisState::ToRawValue(NumericType type, Value value)
+int16_t OisState::ToRawValue(NumericType type, Value value)
 {
 	switch (type)
 	{
@@ -875,7 +875,7 @@ uint16_t OisState::ToRawValue(NumericType type, Value value)
 	}
 }
 
-OisState::Value OisState::FromRawValue(NumericType type, uint16_t value)
+OisState::Value OisState::FromRawValue(NumericType type, int16_t value)
 {
 	Value v;
 	switch (type)
@@ -1186,7 +1186,7 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 		NumericValue* v = FindChannel(m_numericOutputs, channel);
 		if (v)
 		{
-			v->value = FromRawValue(v->type, atoi(payload));
+			v->value = FromRawValue(v->type, (int16_t)atoi(payload));
 			switch (v->type)
 			{
 			case Boolean:  OIS_INFO("<- %d(%s) = %s",   channel, v->name.c_str(), v->value.boolean ? "true" : "false"); break;
