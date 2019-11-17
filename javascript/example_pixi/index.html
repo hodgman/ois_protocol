@@ -1,0 +1,291 @@
+<!DOCTYPE HTML>
+
+<html>
+   <head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=11" />
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json">
+      <style>
+html{ overflow:hidden; width:100%; height:100%; }
+body{ font-family:"Lucida Console", Monaco, monospace; background-color:#050608; font-size:12px; color:#fff; overflow: hidden; }
+      </style>
+      <script src="jquery/jquery-3.3.1.min.js"></script>
+      <script src="pixi/pixi.min.js"></script>
+      <script src="../ois_protocol.js"></script>
+      <script type="text/javascript">
+var ois = false;
+var led0 = { value: 0 };
+
+var log = function(type, msg)
+{
+	var lineStart = "";
+	if( type == OisLog.Out )
+		lineStart = "> ";
+	else if( type == OisLog.In )
+		lineStart = "< ";
+	else if( type == OisLog.Error )
+		lineStart = "[!] ";
+	
+	if( msg.charAt(msg.length-1) == '\n' )
+		msg = msg.substring(0, msg.length-1);
+	$("#log").text(msg);
+};
+
+function WebSocketTest() 
+{
+	if( !("WebSocket" in window) ) 
+	{
+		alert("WebSocket is not supported by your browser!");
+		return;
+	}
+	
+	var inputs = {
+		"BTN_LED0" : OisType.Fraction,
+	};
+	var outputs = {
+		"BTN0" : OisType.Boolean,
+		"AXIS0" : OisType.Fraction,
+		"AXIS1" : OisType.Fraction,
+		"AXIS2" : OisType.Fraction,
+		"AXIS3" : OisType.Fraction,
+	};
+	var commands = [
+		"QUIT"
+	];
+
+	if( ois )
+		ois.Disconnect();
+		
+	var url = "ws://" + window.location.host + "/input";
+	
+	ois = new OisState(url, "HTML test", MakeFourCC("HTML"), MakeFourCC("TEST"), commands, inputs, outputs, 0, log);
+	ois.OnChanged("BTN_LED0", function(v){ led0.value = v; });
+}
+      </script>
+		
+   </head>
+   
+   <body>
+	  
+<script type="text/javascript">
+
+
+WebSocketTest();
+
+
+
+    //var type = "WebGL";
+    //if(!PIXI.utils.isWebGLSupported()){
+    //  type = "canvas"
+    //}
+    //PIXI.utils.sayHello(type);
+const app = new PIXI.Application({ autoResize: true, antialias: true, width:window.innerWidth, height:window.innerHeight });
+document.body.appendChild(app.view);
+window.addEventListener('resize', resize);
+
+//const graphics = new PIXI.Graphics();
+
+function createThumbstick(x, y, asset, axisX, axisY) {
+
+	function onDragStart(event) {
+		// store a reference to the data
+		// the reason for this is because of multitouch
+		// we want to track the movement of this particular touch
+		this.data = event.data;
+		this.alpha = 0.5;
+		this.dragging = true;
+		this.drag_offset =  this.data.getLocalPosition(this.parent);
+	}
+
+	function onDragEnd() {
+		this.alpha = 1;
+		this.dragging = false;
+		// set the interaction data to null
+		this.data = null;
+		this.x = this.lock_x;
+		this.y = this.lock_y;
+		ois.SetOutput(this.axis_x,  0);
+		ois.SetOutput(this.axis_y,  0);
+	}
+
+	function onDragMove() {
+		if (this.dragging) {
+			const pos = this.data.getLocalPosition(this.parent);
+			pos.x -= this.drag_offset.x - this.lock_x;
+			pos.y -= this.drag_offset.y - this.lock_y;
+			var dist_x = pos.x - this.lock_x;
+			var dist_y = pos.y - this.lock_y;
+			var dist = Math.sqrt(dist_x*dist_x + dist_y*dist_y);
+			if( dist > 64 ) {
+				dist_x /= dist;
+				dist_y /= dist;
+				pos.x = this.lock_x + dist_x * 64;
+				pos.y = this.lock_y + dist_y * 64;
+			}
+			else {
+				dist_x /= 64;
+				dist_y /= 64;
+			}
+			ois.SetOutput(this.axis_x,  dist_x*100);
+			ois.SetOutput(this.axis_y,  dist_y*-100);
+			this.x = pos.x;
+			this.y = pos.y;
+		}
+	}
+
+	var sprite = PIXI.Sprite.from(asset);
+	sprite.interactive = true;
+	sprite.buttonMode = true;
+	sprite.anchor.set(0.5);
+	sprite.scale.set(1);
+	sprite.original_x = x;
+	sprite.original_y = y;
+	sprite.axis_x = axisX;
+	sprite.axis_y = axisY;
+	sprite
+		.on('pointerdown', onDragStart)
+		.on('pointerup', onDragEnd)
+		.on('pointerupoutside', onDragEnd)
+		.on('pointermove', onDragMove);
+	app.stage.addChild(sprite);
+	
+	sprite.resize = function()
+	{
+		this.x = this.original_x >= 0 ? this.original_x : app.screen.width + this.original_x;
+		this.y = this.original_y >= 0 ? this.original_y : app.screen.height + this.original_y;
+		this.lock_x = this.x;
+		this.lock_y = this.y;
+	};
+	return sprite;
+}
+
+function createButton(x, y, asset, channel) {
+
+	function onDragStart(event) {
+		this.data = event.data;
+		this.alpha = 0.5;
+		ois.SetOutput(this.channel,  1);
+	}
+
+	function onDragEnd() {
+		this.alpha = 1;
+		this.dragging = false;
+		this.data = null;
+		ois.SetOutput(this.channel,  0);
+	}
+
+	var sprite = PIXI.Sprite.from(asset);
+	sprite.interactive = true;
+	sprite.buttonMode = true;
+	sprite.anchor.set(0.5);
+	sprite.scale.set(1);
+	sprite.original_x = x;
+	sprite.original_y = y;
+	sprite.channel = channel;
+	sprite
+		.on('pointerdown', onDragStart)
+		.on('pointerup', onDragEnd)
+		.on('pointerupoutside', onDragEnd)
+	app.stage.addChild(sprite);
+	sprite.resize = function(s)
+	{
+		this.x = this.original_x >= 0 ? this.original_x : app.screen.width + this.original_x;
+		this.y = this.original_y >= 0 ? this.original_y : app.screen.height + this.original_y;
+	};
+	return sprite;
+}
+
+var leftThumb  = createThumbstick( 128, -128, './assets/LThumb.png', 'AXIS0', 'AXIS1' );
+var rightThumb = createThumbstick( -128, -128, './assets/RThumb.png', 'AXIS2', 'AXIS3' );
+var buttonA    = createButton( -128, 192, './assets/A.png', 'BTN0' );
+var buttonB    = createButton( -64,  128, './assets/B.png', 'BTN1' );
+var buttonX    = createButton( -192, 128, './assets/X.png', 'BTN2' );
+var buttonY    = createButton( -128, 64, './assets/Y.png', 'BTN3' );
+
+
+
+
+
+var fullscreen = PIXI.Sprite.from('./assets/fullscreen.png');
+fullscreen.interactive = true;
+fullscreen.buttonMode = true;
+fullscreen.scale.set(1);
+fullscreen.anchor.set(0.5, 0);
+fullscreen.on('pointerdown', toggleFullScreen);
+app.stage.addChild(fullscreen);
+
+function toggleFullScreen() {
+	if(IsFullScreenCurrently()) {
+		GoOutFullscreen();
+		fullscreen.visible = true;
+	}
+	else {
+		if( GoInFullscreen(document.documentElement) )
+		fullscreen.visible = false;
+	}
+}
+function GoInFullscreen(element) {
+	if(element.requestFullscreen)
+		element.requestFullscreen();
+	else if(element.mozRequestFullScreen)
+		element.mozRequestFullScreen();
+	else if(element.webkitRequestFullscreen)
+		element.webkitRequestFullscreen();
+	else if(element.msRequestFullscreen)
+		element.msRequestFullscreen();
+	else
+		return false;
+	return true;
+}
+
+function GoOutFullscreen() {
+	if(document.exitFullscreen)
+		document.exitFullscreen();
+	else if(document.mozCancelFullScreen)
+		document.mozCancelFullScreen();
+	else if(document.webkitExitFullscreen)
+		document.webkitExitFullscreen();
+	else if(document.msExitFullscreen)
+		document.msExitFullscreen();
+	else
+		return false;
+	return true;
+}
+
+function IsFullScreenCurrently() {
+	var full_screen_element = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement || null;
+	if(full_screen_element === null)
+		return false;
+	else
+		return true;
+}
+
+function resize() {
+	app.renderer.resize(window.innerWidth, window.innerHeight);
+	
+	leftThumb.resize();
+	rightThumb.resize();
+	buttonA.resize();
+	buttonB.resize();
+	buttonX.resize();
+	buttonY.resize();
+	
+	if(!IsFullScreenCurrently())
+		fullscreen.visible = true;
+	fullscreen.x = app.screen.width/2;
+}
+
+resize();
+
+
+</script>
+   
+	  <div id="debug"></div>
+	  <div id="log"></div>
+
+   </body>
+</html>
