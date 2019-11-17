@@ -97,6 +97,7 @@ public:
 		, m_files(files)
 		, m_numFiles(N)
 		, m_allowIndex(allowIndex)
+		, m_port(port)
 	{
 		WORD wsa_version = MAKEWORD(2, 2);
 		WSADATA wsa_data;
@@ -104,7 +105,7 @@ public:
 			return;
 		
 		WebbyServerConfig config = {};
-		config.bind_address = "127.0.0.1";
+		config.bind_address = 0;//"127.0.0.1";
 		config.listening_port = port;
 		config.flags = WEBBY_SERVER_WEBSOCKETS;
 		config.connection_max = 4;
@@ -125,6 +126,8 @@ public:
 		int size = WebbyServerMemoryNeeded( &config );
 		m_memory.resize(size);
 		m_webby = WebbyServerInit( &config, &m_memory.front(), size );
+
+		m_ip = config.bind_address;
 	}
 	~OisWebHost()
 	{
@@ -150,14 +153,18 @@ public:
 		(*it)->abort = true;
 		return true;
 	}
+
+	const OIS_STRING& GetBindAddress() const { return m_ip; }
 private:
 	OIS_VECTOR<OisWebsocketConnection*> m_connections;
 	OIS_VECTOR<char> m_memory;
+	OIS_STRING m_ip;
 	WebbyServer* m_webby = nullptr;
 	const OisWebWhitelist* m_files = nullptr;
 	unsigned m_numFiles = 0;
 	const char* m_gameName;
 	unsigned m_gameVersion;
+	int m_port;
 	bool m_allowIndex;
 	
 	static void webby_log(const char* text)
@@ -171,6 +178,8 @@ private:
 		if (!self.m_numFiles)
 			return 1;
 
+		int         port = self.m_port;
+		const char* hostname = self.m_ip.c_str();
 		const char* uri = connection->request.uri;
 		OIS_WEBBY_INFO( "[webby_dispatch] url:%s", uri);
 
@@ -220,8 +229,8 @@ R"(	</ul>
 				{
 					const char* name = f.path;
 					const char* htmlLine = sb.FormatTemp(
-R"(	<li><a href="%s">%s</a></li>
-)", f.request, name);
+R"(	<li><a href="http://%s:%d%s">%s</a></li>
+)", hostname, port, f.request, name);
 					WebbyWrite(connection, htmlLine, strlen(htmlLine));
 				}
 			}
@@ -301,6 +310,8 @@ R"(	<li><a href="%s">%s</a></li>
 		OIS_WEBBY_INFO( "[webby_ws_frame] url:%s", connection->request.uri);
 		OisWebsocketConnection* oisConnection = (OisWebsocketConnection*)connection->user_data;
 		int size = frame->payload_length;
+		if( size <= 0 )
+			return 0;
 		OIS_VECTOR<uint8_t> buffer;
 		buffer.resize(size);
 		int r = WebbyRead( connection, &buffer.front(), size );

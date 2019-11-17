@@ -513,6 +513,12 @@ WebbyServerInit(struct WebbyServerConfig *config, void *memory, size_t memory_si
   {
     struct sockaddr_in bind_addr;
 
+    if( !config->bind_address || !config->bind_address[0] )
+    {
+      struct hostent* localHost = gethostbyname("");
+      config->bind_address = inet_ntoa(*(struct in_addr *)*localHost->h_addr_list);
+    }
+
     dbg(server, "binding to %s:%d", config->bind_address, config->listening_port);
 
     memset(&bind_addr, 0, sizeof bind_addr); // use 0.0.0.0
