@@ -1,0 +1,149 @@
+<!DOCTYPE HTML>
+
+<html>
+   <head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=11" />
+<meta http-equiv="Pragma" content="no-cache">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json">
+      <style>
+html{ overflow:hidden; width:100%; height:100%; }
+body{ font-family:"Lucida Console", Monaco, monospace; background-color:#050608; font-size:12px; color:#fff;}
+#gui { position:absolute; top:10px; left:10px; width:640px; pointer-events:none;}
+      </style>
+      <script src="jquery/jquery-3.3.1.min.js"></script>
+      <script src="uil/uil.min.js"></script>
+      <script src="../ois_protocol.js"></script>
+      <script type="text/javascript">
+var ois = false;
+var led0 = { value: 0 };
+
+var log = function(type, msg)
+{
+	var lineStart = "";
+	if( type == OisLog.Out )
+		lineStart = "> ";
+	else if( type == OisLog.In )
+		lineStart = "< ";
+	else if( type == OisLog.Error )
+		lineStart = "[!] ";
+	
+	if( msg.charAt(msg.length-1) == '\n' )
+		msg = msg.substring(0, msg.length-1);
+	$("#log").text(msg);
+};
+
+function WebSocketTest() 
+{
+	if( !("WebSocket" in window) ) 
+	{
+		alert("WebSocket is not supported by your browser!");
+		return;
+	}
+	
+	var inputs = {
+		"BTN_LED0" : OisType.Fraction,
+	};
+	var outputs = {
+		"BTN0" : OisType.Boolean,
+		"AXIS0" : OisType.Fraction,
+		"AXIS1" : OisType.Fraction,
+		"AXIS2" : OisType.Fraction,
+		"AXIS3" : OisType.Fraction,
+	};
+	var commands = [
+		"QUIT"
+	];
+
+	if( ois )
+		ois.Disconnect();
+		
+	var url = "ws://" + window.location.host + "/input";
+	
+	ois = new OisState(url, "HTML test", MakeFourCC("HTML"), MakeFourCC("TEST"), commands, inputs, outputs, 0, log);
+	ois.OnChanged("BTN_LED0", function(v){ led0.value = v; });
+}
+      </script>
+		
+   </head>
+   
+   <body>
+   
+	  <div id="debug"></div>
+	  <div id="log"></div>
+	  
+<script type="text/javascript">
+
+var debug = document.getElementById('debug');
+
+var guiCallback = function(v){ /*debug.innerHTML = v;*/ }
+
+var ui = new UIL.Gui( { css:'top:0px; left:0px;', w:window.innerWidth, h:20, center:false } ).onChange( guiCallback );
+
+ui.add('title',  { name:''});
+//ui.add('string', { name:'Host URL', value:"ws://localhost:8080/input"});
+//ui.add('button', { name:'Connect', callback:function(){ WebSocketTest(); } });
+
+var b1 = ui.add('bool',   { name:'bool', h:20, value:false });
+
+var s1 = ui.add('slide',  { name:'slide', min:-100, max:100, value:0, precision:0, h:20 });
+
+
+ui.add('button', { name:'MULTY', fontColor:'#D4B87B', height:30, value:['Button 1', 'Button 2', 'Button 3', 'Button 4'] });
+
+ui.add('button', { name:'Quit', callback:function(){ if( ois ) ois.ExecuteCommand("QUIT"); } });
+
+ui.add('circular', { name:'circular', w:75, min:0, max:100, value:25, precision:0 });
+
+var k1 = ui.add(led0, 'value', { type: 'knob', name:'knob', w:84, min:0, max:1, value:70, precision:2, step:0.1, fontColor:'#D4B87B' });
+k1.listen();
+
+//group = ui.add('group', { name:'Joystick', fontColor:'#D4B87B' });
+//j1 = group.add('joystick', { name:' ', w:640, multiplicator:100, precision:2, fontColor:'#D4B87B' });
+//group.open(); 
+
+
+var half = Math.min(window.innerWidth, window.innerHeight)/2;
+
+
+var j1 = UIL.add('joystick', {  target:document.body, pos:{left:'0px', top:'auto', bottom:'0px' }, name:' ', w:half, multiplicator:100, precision:2, fontColor:'#D4B87B' }).onChange( guiCallback );
+var j2 = UIL.add('joystick', {  target:document.body, pos:{right:'0px', top:'auto', bottom:'0px' }, name:' ', w:half, multiplicator:100, precision:2, fontColor:'#D4B87B' }).onChange( guiCallback );
+
+j1.onChange(function() { if( ois ) { ois.SetOutput("AXIS0",  j1.value[0]); ois.SetOutput("AXIS1",  j1.value[1]);} });
+j2.onChange(function() { if( ois ) { ois.SetOutput("AXIS2",  j2.value[0]); ois.SetOutput("AXIS3",  j2.value[1]);} });
+
+//b1.onChange(function() { if( ois ) ois.SetOutput( "BTN0", b1.value ); });
+//s1.onChange(function() { if( ois ) ois.SetOutput( "AXIS0", s1.value ); });
+//
+//b1.value
+
+
+
+var gamepads = {};
+function gamepadHandler(event, connecting) {
+  var gamepad = event.gamepad;
+  if (connecting) {
+    gamepads[gamepad.index] = gamepad;
+  } else {
+    delete gamepads[gamepad.index];
+  }
+}
+
+window.addEventListener("gamepadconnected", function(e) { gamepadHandler(e, true); }, false);
+window.addEventListener("gamepaddisconnected", function(e) { gamepadHandler(e, false); }, false);
+
+
+
+
+
+WebSocketTest();
+
+
+
+</script>
+
+   </body>
+</html>
