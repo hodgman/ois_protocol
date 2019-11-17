@@ -30,6 +30,8 @@ void InputOis_Shutdown();
 void InputOis_Connect(const PortName&);
 void InputOis_Disconnect(const OisDevice&);
 
+const char* InputOis_GetWebIP();
+int         InputOis_GetWebPort();
 
 struct OisHostEx
 {

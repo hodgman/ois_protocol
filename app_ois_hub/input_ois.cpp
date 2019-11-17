@@ -114,19 +114,35 @@ static OIS_STRING_BUILDER sb;
 static OisAllConnectionList    g_allDevices;
 static OisSerialConnectionList g_serialConnections;
 static OisWebHost*             g_websockets = nullptr;
+static const char*             g_webIP = nullptr;
 AppGlobals g;
+constexpr int g_port = 8082;
 
 static OisWebWhitelist g_webFiles[] =
 {
-	{ "/ois_protocol.js", "../javascript/ois_protocol.js" },
-	{ "/example/",        "../javascript/example/index.html" },
-	{ "/example/",        "../javascript/", true },
+	{ "/ois_protocol.js",  "../javascript/ois_protocol.js" },
+	{ "/example_uil/",     "../javascript/example_uil/index.html" },
+	{ "/example_uil/",     "../javascript/", true },
+	{ "/example_pixi/",    "../javascript/example_pixi/index.html" },
+	{ "/example_pixi/",    "../javascript/", true },
+	{ "/example_gamepad/", "../javascript/example_gamepad/index.html" },
+	{ "/example_gamepad/", "../javascript/", true },
 };
 
 void InputOis_Init()
 {
 	delete g_websockets;
-	g_websockets = new OisWebHost(GAME_VERSION, GAME_NAME, g_webFiles, true, 8080);
+	g_websockets = new OisWebHost(GAME_VERSION, GAME_NAME, g_webFiles, true, g_port);
+	g_webIP = g_websockets->GetBindAddress().c_str();
+}
+
+const char* InputOis_GetWebIP()
+{
+	return g_webIP;
+}
+int InputOis_GetWebPort()
+{
+	return g_port;
 }
 
 static void UpdateDevice( OisDeviceEx& d, float deltaTime )
@@ -168,6 +184,7 @@ void InputOis_Shutdown()
 {
 	delete g_websockets;
 	g_websockets = 0;
+	g_webIP = 0;
 	g_serialConnections.Clear();
 	g_allDevices.GarbageCollect();
 }

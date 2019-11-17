@@ -346,6 +346,15 @@ void DrawGui(struct nk_context* ctx, std::vector<OisDeviceEx*>& devices, OisHost
 {
 	if (nk_begin(ctx, "Inputs", nk_rect(0, 0, (float)gdi.width/2-2, (float)gdi.height), 0))
 	{
+		const char* hostname = InputOis_GetWebIP();
+		nk_layout_row_dynamic(ctx, 30, 1);
+		if(hostname && nk_button_label(ctx, "Open Websocket Example"))
+		{
+			int port = InputOis_GetWebPort();
+			OIS_STRING_BUILDER sb;
+			const char* comand = sb.FormatTemp("start http://%s:%d", hostname, port);
+			system(comand);
+		}
 		if (nk_tree_push(ctx, NK_TREE_TAB, "Ois Log", NK_MINIMIZED))
 		{
 			DoLogGui(ctx, g.oisLog);
