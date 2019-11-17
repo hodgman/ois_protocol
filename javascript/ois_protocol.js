@@ -105,10 +105,10 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 			value = value!=0 ? 1 : 0;
 			break;
 		case OisType.Number:
-			value = Math.min(32767, Math.max(-32768, value));
+			value = Math.min(32767, Math.max(-32768, Math.round(value)));
 			break;
 		case OisType.Fraction:
-			value = Math.min(32767, Math.max(-32768, value*100));
+			value = Math.min(32767, Math.max(-32768, Math.round(value*100)));
 			break;
 		}
 		self.writeBuffer += index+"="+value+"\n";
