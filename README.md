@@ -31,8 +31,12 @@ TODO: How to use / configure
 
 ### Examples
 
-- [javascript/example](javascript/example)
+- [javascript/example/example_uil](javascript/example/example_uil)
   - A HTML virtual controller using Websockets
+- [javascript/example/example_pixi](javascript/example/example_pixi)
+  - Another HTML virtual controller using Websockets
+- [arduino/example](arduino/example)
+  - Example Arduino IDE project
 - [app_ois_hub](app_ois_hub/)
   - A C++ host (e.g. as you would use in a game) using serial (COM) ports and Websockets
   - A C++ client / virtual controller using serial (COM) ports
