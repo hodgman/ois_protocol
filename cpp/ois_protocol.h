@@ -545,6 +545,9 @@ public:
 
 	template<class T>
 	bool PopEvents(T& fn);//calls fn(const Event&)
+	bool SetInput(const NumericValue& input, bool value);
+	bool SetInput(const NumericValue& input, int value);
+	bool SetInput(const NumericValue& input, float value);
 	bool SetInput(const NumericValue& input, Value value);
 	bool SetInput(uint16_t inputChannel, Value value);
 private:
@@ -1368,6 +1371,39 @@ bool OisDevice::ProcessAscii(char* cmd, OIS_STRING_BUILDER& sb)
 	return true;
 }
 
+bool OisDevice::SetInput(const NumericValue& input, bool b)
+{
+	OisState::Value value;
+	switch( input.type )
+	{
+	case OisState::Boolean:  value.boolean  = b; break;
+	case OisState::Number:   value.number   = b ? 0 : 1; break;
+	case OisState::Fraction: value.fraction = b ? 0.f : 1.f; break;
+	}
+	return SetValueAndEnqueue(input, value, m_numericInputs, m_queuedInputs);
+}
+bool OisDevice::SetInput(const NumericValue& input, int i)
+{
+	OisState::Value value;
+	switch( input.type )
+	{
+	case OisState::Boolean:  value.boolean  = i != 0; break;
+	case OisState::Number:   value.number   = i; break;
+	case OisState::Fraction: value.fraction = (float)i; break;
+	}
+	return SetValueAndEnqueue(input, value, m_numericInputs, m_queuedInputs);
+}
+bool OisDevice::SetInput(const NumericValue& input, float f)
+{
+	OisState::Value value;
+	switch( input.type )
+	{
+	case OisState::Boolean:  value.boolean  = f != 0.f; break;
+	case OisState::Number:   value.number   = (int)roundf(f); break;
+	case OisState::Fraction: value.fraction = f; break;
+	}
+	return SetValueAndEnqueue(input, value, m_numericInputs, m_queuedInputs);
+}
 bool OisDevice::SetInput(const NumericValue& input, Value value)
 {
 	return SetValueAndEnqueue(input, value, m_numericInputs, m_queuedInputs);
