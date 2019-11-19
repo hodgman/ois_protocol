@@ -35,6 +35,8 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 		
 	this.wsOpen = false;
 	this.maxVersion = version > 0 ? version : 2;
+	this.version = 0;
+	this.lastHandshakeTime = new Date();
 	this.deviceName = deviceName;
 	this.pid = pid;
 	this.vid = vid;
@@ -294,6 +296,7 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 	
 	function Reset()
 	{
+		self.lastHandshakeTime = new Date();
 		self.deviceState = OisDeviceState.Handshaking;
 		self.binary = false;
 		self.commandBuffer = "";
@@ -301,22 +304,24 @@ function OisState(url, deviceName, pid, vid, commands, inputs, outputs, version,
 		self.gameTitle = "";
 		self.gameVersion = 0;
 		self.version = self.maxVersion;
-		self.lastHandshakeTime = new Date();
-		self.ws = new WebSocket(url);
-		self.ws.onopen = function() 
+		if( url != "ws:///input" )
 		{
-			self.wsOpen = true;
-		};
-		self.ws.onclose = function()
-		{ 
-			self.wsOpen = false;
-		};
-		self.ws.onerror = self.ws.onclose;
-		self.ws.onmessage = function(evt) 
-		{ 
-			wsReader.readAsText(evt.data);
-		};
-		log(OisLog.Out, "Connecting to "+url);
+			self.ws = new WebSocket(url);
+			self.ws.onopen = function() 
+			{
+				self.wsOpen = true;
+			};
+			self.ws.onclose = function()
+			{ 
+				self.wsOpen = false;
+			};
+			self.ws.onerror = self.ws.onclose;
+			self.ws.onmessage = function(evt) 
+			{ 
+				wsReader.readAsText(evt.data);
+			};
+			log(OisLog.Out, "Connecting to "+url);
+		}
 	};
 	Reset();
 	
